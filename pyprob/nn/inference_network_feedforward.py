@@ -5,7 +5,7 @@ from termcolor import colored
 
 from . import InferenceNetwork, ProposalNormalNormalMixture, ProposalUniformTruncatedNormalMixture, ProposalCategoricalCategorical, ProposalBernoulliBernoulli, ProposalPoissonTruncatedNormalMixture
 from .. import util
-from ..distributions import Normal, Uniform, Categorical, Poisson, Bernoulli
+from ..distributions import Normal, Uniform, Categorical, Poisson, Bernoulli, TruncatedExponential
 
 
 class InferenceNetworkFeedForward(InferenceNetwork):
@@ -38,6 +38,8 @@ class InferenceNetworkFeedForward(InferenceNetwork):
                         layer = ProposalCategoricalCategorical(self._observe_embedding_dim, distribution.num_categories)
                     elif isinstance(distribution, Bernoulli):
                         layer = ProposalBernoulliBernoulli(self._observe_embedding_dim)
+                    elif isinstance(distribution, TruncatedExponential):
+                        layer = ProposalUniformTruncatedNormalMixture(self._observe_embedding_dim, variable_shape, mixture_components=self._proposal_mixture_components)
                     else:
                         raise RuntimeError('Distribution currently unsupported: {}'.format(distribution.name))
                     layer.to(device=util._device)

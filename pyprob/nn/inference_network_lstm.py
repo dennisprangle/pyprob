@@ -5,7 +5,7 @@ from termcolor import colored
 
 from . import InferenceNetwork, EmbeddingFeedForward, ProposalNormalNormalMixture, ProposalUniformTruncatedNormalMixture, ProposalCategoricalCategorical, ProposalBernoulliBernoulli, ProposalPoissonTruncatedNormalMixture
 from .. import util
-from ..distributions import Normal, Uniform, Categorical, Poisson, Bernoulli
+from ..distributions import Normal, Uniform, Categorical, Poisson, Bernoulli, TruncatedExponential
 
 
 class InferenceNetworkLSTM(InferenceNetwork):
@@ -63,6 +63,9 @@ class InferenceNetworkLSTM(InferenceNetwork):
                         sample_embedding_layer = EmbeddingFeedForward(variable.value.shape, self._sample_embedding_dim, input_is_one_hot_index=True, input_one_hot_dim=distribution.num_categories, num_layers=1)
                     elif isinstance(distribution, Bernoulli):
                         proposal_layer = ProposalBernoulliBernoulli(self._lstm_dim)
+                        sample_embedding_layer = EmbeddingFeedForward(variable.value.shape, self._sample_embedding_dim, num_layers=1)
+                    elif isinstance(distribution, TruncatedExponential):
+                        proposal_layer = ProposalUniformTruncatedNormalMixture(self._lstm_dim, variable_shape, mixture_components=self._proposal_mixture_components)
                         sample_embedding_layer = EmbeddingFeedForward(variable.value.shape, self._sample_embedding_dim, num_layers=1)
                     else:
                         raise RuntimeError('Distribution currently unsupported: {}'.format(distribution.name))
