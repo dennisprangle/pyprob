@@ -6,6 +6,7 @@ from termcolor import colored
 from . import InferenceNetwork, EmbeddingFeedForward, ProposalNormalNormalMixture, ProposalUniformTruncatedNormalMixture, ProposalCategoricalCategorical, ProposalBernoulliBernoulli, ProposalPoissonTruncatedNormalMixture
 from .. import util
 from ..distributions import Normal, Uniform, Categorical, Poisson, Bernoulli, TruncatedExponential
+from ..distributions import Normal, Uniform, Categorical, Poisson, TruncatedExponential
 
 
 class InferenceNetworkLSTM(InferenceNetwork):
