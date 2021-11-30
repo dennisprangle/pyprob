@@ -39,7 +39,7 @@ class InferenceNetworkFeedForward(InferenceNetwork):
                     elif isinstance(distribution, Bernoulli):
                         layer = ProposalBernoulliBernoulli(self._observe_embedding_dim)
                     elif isinstance(distribution, TruncatedExponential):
-                        layer = ProposalUniformTruncatedNormalMixture(self._observe_embedding_dim, variable_shape, mixture_components=self._proposal_mixture_components)
+                        layer = ProposalUniformTruncatedNormalMixture(self._observe_embedding_dim, mixture_components=self._proposal_mixture_components)
                     else:
                         raise RuntimeError('Distribution currently unsupported: {}'.format(distribution.name))
                     layer.to(device=util._device)

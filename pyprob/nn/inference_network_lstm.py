@@ -66,7 +66,7 @@ class InferenceNetworkLSTM(InferenceNetwork):
                         proposal_layer = ProposalBernoulliBernoulli(self._lstm_dim)
                         sample_embedding_layer = EmbeddingFeedForward(variable.value.shape, self._sample_embedding_dim, num_layers=1)
                     elif isinstance(distribution, TruncatedExponential):
-                        proposal_layer = ProposalUniformTruncatedNormalMixture(self._lstm_dim, variable_shape, mixture_components=self._proposal_mixture_components)
+                        proposal_layer = ProposalUniformTruncatedNormalMixture(self._lstm_dim, mixture_components=self._proposal_mixture_components)
                         sample_embedding_layer = EmbeddingFeedForward(variable.value.shape, self._sample_embedding_dim, num_layers=1)
                     else:
                         raise RuntimeError('Distribution currently unsupported: {}'.format(distribution.name))
