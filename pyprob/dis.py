@@ -89,8 +89,7 @@ class ModelDIS(Model):
         kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
         return super()._traces(*args, **kwargs)
 
-    # TO DO: PRETRAINING?
-    def train(self, iterations=10, importance_sample_size=1000, ess_target=500, batch_size=100, nbatches=10, **kwargs):
+    def train(self, iterations=10, importance_sample_size=1000, ess_target=500, batch_size=100, nbatches=5, **kwargs):
         for i in range(iterations):
             if self._inference_network is None:
                 sample = self.prior(
@@ -112,31 +111,39 @@ class ModelDIS(Model):
                 raise RuntimeError('Cannot extract distances. Ensure the "forward" method computes the distance between the simulation and an observed dataset, and stores it as a pyprob observation named "distance".')
             log_w_contrib = -0.5 * sqd / self.epsilon**2.
             w = sample.weights * torch.exp(log_w_contrib)
-            new_epsilon = find_eps(sqd, w, self.epsilon, ess_target, self.epsilon)
+            upper_eps = self.epsilon
+            if upper_eps == np.inf:
+                # A finite value needed, so pick a sensible upper bound
+                upper_eps = torch.max(sqd).item()
+            new_epsilon = find_eps(sqd, w, self.epsilon, ess_target, upper_eps)
             w = get_alternate_weights(sqd, w, self.epsilon, new_epsilon)
             self.epsilon = new_epsilon
             ess = effective_sample_size(w)
             # TO DO: TRUNCATE WEIGHTS?
+            # Delete existing files so results not just appended to old ones
+            file_name = "pyprob_traces_training_batch"
+            if os.path.exists(file_name):
+                os.remove(file_name)
+            if os.path.exists("pyprob_hashes"):
+                os.remove("pyprob_hashes")
+            batch = Empirical(file_name=file_name)
             # Resample importance sample to get a training batch
             # TO DO: In the longer term, maybe allow 'learn_inference_network'
             # to cope with a weighted training batch. I think this requires
             # adding a sampler handling weights to 'inference_network.optimize')
-            file_name = "pyprob_traces_training_batch"
-            if os.path.exists(file_name):
-                # Need to delete existing file otherwise results just get appended to existing ones
-                os.remove(file_name)
-            batch = Empirical(file_name=file_name)
-            indices = torch.multinomial(w, batch_size, replacement=True)
-            for i in indices:
-                batch.add(sample.values[i], 0.)
+            indices = torch.multinomial(w, batch_size*nbatches, replacement=True)
+            for j in indices:
+                batch.add(sample.values[j], 0.)
             batch._shelf['__length'] = batch_size
             batch.close()
+            # TO DO: suppress messages about OfflineDataset creation
             self.learn_inference_network(
-                num_traces=nbatches,
+                num_traces=nbatches*batch_size, # TO DO: is this correct???
                 dataset_dir=".",
+                batch_size=batch_size,
                 **kwargs
             )
-        # TO DO: Report results with more detail and more neatly
-        print(f"Done a training iteration, epsilon {self.epsilon:.2f}"
-              f"ESS {ess:.1f}")
-
+            # TO DO: Improve reporting results?
+            print(f"Training iterations {i+1} "
+                  f" epsilon {self.epsilon:.2f} "
+                  f" ESS {ess:.1f}")
