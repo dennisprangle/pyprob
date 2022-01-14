@@ -1,4 +1,5 @@
 # Code to implement DIS algorithm
+from tarfile import FIFOTYPE
 import torch
 import numpy as np
 import os
@@ -147,3 +148,7 @@ class ModelDIS(Model):
             print(f"Training iterations {i+1} "
                   f" epsilon {self.epsilon:.2f} "
                   f" ESS {ess:.1f}")
+
+    def save(self, file_name):
+        self.save_inference_network(file_name)
+
