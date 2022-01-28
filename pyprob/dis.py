@@ -89,6 +89,25 @@ class ModelDIS(Model):
         kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
         return super()._traces(*args, **kwargs)
 
+
+    def update_DIS_posterior_weights(self, posterior):
+        # Modify weights to take distance into account
+        try:
+            dist = [
+                x.named_variables["distance"].value.item()
+                for x in posterior.values
+            ]
+            sqd = torch.tensor(dist) ** 2.
+        except:
+            raise RuntimeError('Cannot extract distances. Ensure the "forward" method computes the distance between the simulation and an observed dataset, and stores it as a pyprob observation named "distance".')
+        log_w_contrib = -0.5 * sqd / self.epsilon**2.
+        posterior.sqd = sqd
+        # Note - can't set posterior.weights directly (it's a property with no setter)
+        # But can access the underlying variables in which weights is stored.
+        posterior._categorical.probs = posterior.weights * torch.exp(log_w_contrib)
+        return posterior
+
+
     def train(self, iterations=10, importance_sample_size=1000, ess_target=500, batch_size=100, nbatches=5, **kwargs):
         for i in range(iterations):
             if self._inference_network is None:
@@ -101,16 +120,9 @@ class ModelDIS(Model):
                     inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,
                     observe={"bool_func": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
                 )
-            try:
-                dist = [
-                    x.named_variables["distance"].value.item()
-                    for x in sample.values
-                ]
-                sqd = torch.tensor(dist) ** 2.
-            except:
-                raise RuntimeError('Cannot extract distances. Ensure the "forward" method computes the distance between the simulation and an observed dataset, and stores it as a pyprob observation named "distance".')
-            log_w_contrib = -0.5 * sqd / self.epsilon**2.
-            w = sample.weights * torch.exp(log_w_contrib)
+            sample = self.update_DIS_posterior_weights(sample)
+            w = sample.weights
+            sqd = sample.sqd
             upper_eps = self.epsilon
             if upper_eps == np.inf:
                 # A finite value needed, so pick a sensible upper bound
