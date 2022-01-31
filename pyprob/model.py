@@ -1,3 +1,5 @@
+# Some annotations by Sammy (occasional speculation)
+
 import torch
 import time
 import sys
@@ -30,6 +32,8 @@ class Model():
     def forward(self):
         raise RuntimeError('Model instances must provide a forward method.')
 
+    # Each yield statement generates the trace of one run of the simulator.
+    # Trace should include values of sample statements, their addresses and call numbers.
     def _trace_generator(self, trace_mode=TraceMode.PRIOR, prior_inflation=PriorInflation.DISABLED, inference_engine=InferenceEngine.IMPORTANCE_SAMPLING, inference_network=None, observe=None, metropolis_hastings_trace=None, likelihood_importance=1., *args, **kwargs):
         state._init_traces(func=self.forward, trace_mode=trace_mode, prior_inflation=prior_inflation, inference_engine=inference_engine, inference_network=inference_network, observe=observe, metropolis_hastings_trace=metropolis_hastings_trace, address_dictionary=self._address_dictionary, likelihood_importance=likelihood_importance)
         while True:
@@ -38,14 +42,15 @@ class Model():
             trace = state._end_trace(result)
             yield trace
 
+    #Invokes the trace generator.
     def _traces(self, num_traces=10, trace_mode=TraceMode.PRIOR, prior_inflation=PriorInflation.DISABLED, inference_engine=InferenceEngine.IMPORTANCE_SAMPLING, inference_network=None, map_func=None, silent=False, observe=None, file_name=None, likelihood_importance=1., *args, **kwargs):
         generator = self._trace_generator(trace_mode=trace_mode, prior_inflation=prior_inflation, inference_engine=inference_engine, inference_network=inference_network, observe=observe, likelihood_importance=likelihood_importance, *args, **kwargs)
-        traces = Empirical(file_name=file_name)
-        if map_func is None:
+        traces = Empirical(file_name=file_name) # From file.
+        if map_func is None: # Some function of the trace... e.g. summary of data?
             map_func = lambda trace: trace
-        log_weights = util.to_tensor(torch.zeros(num_traces))
+        log_weights = util.to_tensor(torch.zeros(num_traces)) # Initialisation -> weights are 1, logs 0.
         time_start = time.time()
-        if (util._verbosity > 1) and not silent:
+        if (util._verbosity > 1) and not silent: # Logs progress.
             len_str_num_traces = len(str(num_traces))
             print('Time spent  | Time remain.| Progress             | {} | {} | Traces/sec'.format('Trace'.ljust(len_str_num_traces * 2 + 1), 'ESS'.ljust(len_str_num_traces+2)))
             prev_duration = 0
@@ -53,7 +58,7 @@ class Model():
         for i in range(num_traces):
             trace = next(generator)
             if trace_mode == TraceMode.PRIOR:
-                log_weight = 1.
+                log_weight = 1. # Log weight, should probably be 0. 
             else:
                 log_weight = trace.log_importance_weight
             if util.has_nan_or_inf(log_weight):
