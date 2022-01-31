@@ -24,8 +24,9 @@ from .. import __version__, util, Optimizer, LearningRateScheduler, ObserveEmbed
 
 class InferenceNetwork(nn.Module):
     # observe_embeddings example: {'obs1': {'embedding':ObserveEmbedding.FEEDFORWARD, 'reshape': [10, 10], 'dim': 32, 'depth': 2}}
-    def __init__(self, model, observe_embeddings={}, network_type=''):
+    def __init__(self, model, observe_embeddings={}, network_type='', dis = False):
         super().__init__()
+        self._dis = dis
         self._model = model
         self._layers_observe_embedding = nn.ModuleDict()
         self._layers_observe_embedding_final = None
@@ -79,7 +80,11 @@ class InferenceNetwork(nn.Module):
 
     def _init_layers_observe_embedding(self, observe_embeddings, example_trace):
         if len(observe_embeddings) == 0:
-            raise ValueError('At least one observe embedding is needed to initialize inference network.')
+            if self._dis == True:
+                #print('preparing network for distilling importance sampling')
+                return
+            else:
+                raise ValueError('At least one observe embedding is needed to initialize inference network.')
         if isinstance(observe_embeddings, set):
             observe_embeddings = {o: {} for o in observe_embeddings}
         observe_embedding_total_dim = 0
@@ -130,6 +135,9 @@ class InferenceNetwork(nn.Module):
         self._layers_observe_embedding_final.to(device=util._device)
 
     def _embed_observe(self, traces=None):
+        if self._dis:
+            print("distilling importance sampling - no observations embedded")
+            return
         embedding = []
         for name, layer in self._layers_observe_embedding.items():
             values = torch.stack([util.to_tensor(trace.named_variables[name].value) for trace in traces]).view(len(traces), -1)
@@ -139,6 +147,8 @@ class InferenceNetwork(nn.Module):
         return embedding
 
     def _infer_init(self, observe=None):
+        if self._dis:
+            return
         self._infer_observe = observe
         embedding = []
         for name, layer in self._layers_observe_embedding.items():
