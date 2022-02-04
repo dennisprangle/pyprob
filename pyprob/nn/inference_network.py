@@ -24,7 +24,7 @@ from .. import __version__, util, Optimizer, LearningRateScheduler, ObserveEmbed
 
 class InferenceNetwork(nn.Module):
     # observe_embeddings example: {'obs1': {'embedding':ObserveEmbedding.FEEDFORWARD, 'reshape': [10, 10], 'dim': 32, 'depth': 2}}
-    def __init__(self, model, observe_embeddings={}, network_type=''):
+    def __init__(self, model, observe_embeddings={}, network_type=''): # Add option observations = False eventually
         super().__init__()
         self._model = model
         self._layers_observe_embedding = nn.ModuleDict()

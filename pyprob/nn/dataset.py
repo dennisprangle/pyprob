@@ -176,12 +176,16 @@ class OfflineDataset(ConcatDataset):
     def __init__(self, dataset_dir):
         self._dataset_dir = dataset_dir
         # files = [name for name in os.listdir(self._dataset_dir)]
-        files = sorted(glob(os.path.join(self._dataset_dir, 'pyprob_traces_sorted_*')))
+        files_ext = sorted(glob(os.path.join(self._dataset_dir, 'pyprob_traces_sorted_*')))
+        # Sammy note: this fails for me. Need file names without extensions.
+        # Create list both with and without to try to preserve comaptibility.
+        files = set([os.path.splitext(val)[0] for val in files_ext]+files_ext)
         if len(files) > 0:
             self._sorted_on_disk = True
         else:
             self._sorted_on_disk = False
-            files = sorted(glob(os.path.join(self._dataset_dir, 'pyprob_traces_*')))
+            files_ext = sorted(glob(os.path.join(self._dataset_dir, 'pyprob_traces_*')))
+            files=set([os.path.splitext(val)[0] for val in files_ext]+files_ext)
         if len(files) == 0:
             raise RuntimeError('Cannot find any data set files at {}'.format(dataset_dir))
         datasets = []
