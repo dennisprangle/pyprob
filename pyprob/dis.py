@@ -147,7 +147,7 @@ class ModelDIS(Model):
             indices = torch.multinomial(w, batch_size*nbatches, replacement=True)
             for j in indices:
                 batch.add(sample.values[j], 0.)
-            batch._shelf['__length'] = batch_size
+            batch._shelf['__length'] = batch_size*nbatches # Sammy: changed from just batch_size
             batch.close()
             # TO DO: suppress messages about OfflineDataset creation
             self.learn_inference_network(
