@@ -144,7 +144,7 @@ def observe(distribution, value=None, name=None, address=None):
         log_importance_weight = None
     else:
         observed = True
-        log_prob = _likelihood_importance * distribution.log_prob(value, sum=True)
+        log_prob = _likelihood_importance * distribution.log_prob(value, sum=True) # S: Why multiply? If dealing with logs.
         if _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING or _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK:
             log_importance_weight = float(log_prob)
         else:
@@ -178,7 +178,7 @@ def sample(distribution, name=None, address=None, control=True):
         # Variable is observed
         address = address_base + '__' + str(instance)
         value = _current_trace_observed_variables[name]
-        log_prob = _likelihood_importance * distribution.log_prob(value, sum=True)
+        log_prob = _likelihood_importance * distribution.log_prob(value, sum=True) # S: As before - why product?
         if _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING or _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK:
             log_importance_weight = float(log_prob)
         else:
