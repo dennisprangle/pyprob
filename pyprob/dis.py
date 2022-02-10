@@ -84,12 +84,11 @@ class ModelDIS(Model):
         super().__init__(**kwargs)
         self.epsilon = epsilon
 
-    def _traces(self, *args, **kwargs):
-        # Set observable values whenever _traces is run, even from 'prior' or 'posterior'
-        # (allows prior and posterior to create samples suitable for training)
-        kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
-        return super()._traces(*args, **kwargs)
-
+    # def _traces(self, *args, **kwargs):
+    #     # Set observable values whenever _traces is run, even from 'prior' or 'posterior'
+    #     # (allows prior and posterior to create samples suitable for training)
+    #     kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
+    #     return super()._traces(*args, **kwargs)
 
     def update_DIS_posterior_weights(self, posterior):
         # Modify weights to take distance into account
@@ -112,15 +111,17 @@ class ModelDIS(Model):
     def train(self, iterations=10, importance_sample_size=1000, ess_target=500, batch_size=100, nbatches=5, **kwargs):
         for i in range(iterations):
             if self._inference_network is None:
-                sample = self.prior(
-                    num_traces=importance_sample_size,
+                self.learn_inference_network(
+                    num_traces=nbatches*batch_size,
+                    #observe_embeddings={'bool_func': {'dim': 1, 'depth': 1}},
+                    batch_size=batch_size,
+                    **kwargs
                 )
-            else:
-                sample = self.posterior(
-                    num_traces=importance_sample_size,
-                    inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,
-                    observe={"bool_func": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
-                )
+            sample = self.posterior(
+                num_traces=importance_sample_size,
+                inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,
+                observe={"bool_func": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
+            )
             sample = self.update_DIS_posterior_weights(sample)
             w = sample.weights
             sqd = sample.sqd
