@@ -80,9 +80,12 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
 
 
 class ModelDIS(Model):
-    def __init__(self, epsilon=np.inf, **kwargs):
+    def __init__(self, epsilon=np.inf, obs = None, dist_fun = None,**kwargs):
         super().__init__(**kwargs)
         self.epsilon = epsilon
+        self.distances = None
+        self.dist_fun = dist_fun
+        self.obs = obs
 
     # def _traces(self, *args, **kwargs):
     #     # Set observable values whenever _traces is run, even from 'prior' or 'posterior'
@@ -92,19 +95,15 @@ class ModelDIS(Model):
 
     def update_DIS_posterior_weights(self, posterior):
         # Modify weights to take distance into account
-        try:
-            dist = [
-                x.named_variables["distance"].value.item()
-                for x in posterior.values
-            ]
-            sqd = torch.tensor(dist) ** 2.
-        except:
-            raise RuntimeError('Cannot extract distances. Ensure the "forward" method computes the distance between the simulation and an observed dataset, and stores it as a pyprob observation named "distance".')
-        log_w_contrib = -0.5 * sqd / self.epsilon**2.
-        posterior.sqd = sqd
+        if not self.dist_fun:
+            raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
+        # Consider future efficiency: broadcasting / working with posterior_results etc.
+        self.distances = torch.tensor([self.dist_fun(self.obs,x.named_variables['sample_obs'].value) for x in posterior.values])
+        posterior.sqd = self.distances**2
+        log_w_contrib = -0.5 * posterior.sqd / self.epsilon**2.
         # Note - can't set posterior.weights directly (it's a property with no setter)
         # But can access the underlying variables in which weights is stored.
-        posterior._categorical.probs = posterior.weights * torch.exp(log_w_contrib)
+        posterior._categorical.logits += log_w_contrib
         return posterior
 
 
