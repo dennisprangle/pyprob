@@ -117,6 +117,11 @@ def factor(log_prob=None, log_prob_func=None, name=None, address=None):
 
 def observe(distribution, value=None, name=None, address=None):
     global _current_trace
+    global _current_trace_previous_variable
+
+    if _inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+        return sample(distribution, name = name, address = address)
+
     if _current_trace is None:
         return
     if address is None:
@@ -135,6 +140,21 @@ def observe(distribution, value=None, name=None, address=None):
         value = util.to_tensor(value)
     elif _trace_mode == TraceMode.PRIOR_FOR_INFERENCE_NETWORK and distribution is not None:
         value = distribution.sample()
+    # elif _inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+    #     variable = Variable(distribution=distribution, value=None, address_base=address_base, address=address, instance=instance, log_prob=0., control=True, name=name, observed=True, reused=False)
+    #     proposal_distribution = _current_trace_inference_network._infer_step(variable, prev_variable=_current_trace_previous_variable, proposal_min_train_iterations=_current_trace_inference_network_proposal_min_train_iterations)
+    #     value = proposal_distribution.sample()
+    #     if value.dim() > 0:
+    #         value = value[0]
+    #     log_prob = distribution.log_prob(value, sum=True)
+    #     proposal_log_prob = proposal_distribution.log_prob(value, sum=True)
+    #     if util.has_nan_or_inf(log_prob):
+    #         warnings.warn('Prior log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\n log_prob: {}'.format(distribution, value, log_prob))
+    #     if util.has_nan_or_inf(proposal_log_prob):
+    #         warnings.warn('Proposal log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\nlog_prob: {}'.format(proposal_distribution, value, proposal_log_prob))
+    #     log_importance_weight = float(log_prob) - float(proposal_log_prob)
+    #     variable = Variable(distribution=distribution, value=value, address_base=address_base, address=address, instance=instance, log_prob=log_prob, log_importance_weight=log_importance_weight, control=True, name=name, observed=True, reused=False)
+    #     _current_trace_previous_variable = variable
     else:
         value = None
 
@@ -145,7 +165,7 @@ def observe(distribution, value=None, name=None, address=None):
     else:
         observed = True
         log_prob = _likelihood_importance * distribution.log_prob(value, sum=True) # S: Why multiply? If dealing with logs.
-        if _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING or _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK:
+        if _inference_engine in (InferenceEngine.IMPORTANCE_SAMPLING, InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK, InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING):
             log_importance_weight = float(log_prob)
         else:
             log_importance_weight = None  # TODO: Check the reason/behavior of this
@@ -155,7 +175,7 @@ def observe(distribution, value=None, name=None, address=None):
     return variable.value
 
 
-def sample(distribution, name=None, address=None, control=True):
+def sample(distribution, name=None, address=None, control=True): # Add dis flag. Then if dis: observed = True
     global _current_trace
     global _current_trace_previous_variable
 
@@ -200,9 +220,11 @@ def sample(distribution, name=None, address=None, control=True):
                     value = inflated_distribution.sample()
                     log_prob = distribution.log_prob(value, sum=True)
                     log_importance_weight = float(log_prob) - float(inflated_distribution.log_prob(value, sum=True))  # To account for prior inflation
-            elif _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK:
+            elif _inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK or _inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
                 address = address_base + '__' + str(instance)
                 if control:
+                    if _inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+                        observed = True
                     variable = Variable(distribution=distribution, value=None, address_base=address_base, address=address, instance=instance, log_prob=0., control=control, name=name, observed=observed, reused=reused)
                     proposal_distribution = _current_trace_inference_network._infer_step(variable, prev_variable=_current_trace_previous_variable, proposal_min_train_iterations=_current_trace_inference_network_proposal_min_train_iterations)
                     value = proposal_distribution.sample()

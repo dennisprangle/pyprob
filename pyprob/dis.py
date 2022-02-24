@@ -80,8 +80,9 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
 
 
 class ModelDIS(Model):
-    def __init__(self, epsilon=np.inf, obs = None, dist_fun = None,**kwargs):
+    def __init__(self, epsilon=np.inf, obs = None, dist_fun = None, **kwargs):
         super().__init__(**kwargs)
+        self.dis_model = True
         self.epsilon = epsilon
         self.distances = None
         self.dist_fun = dist_fun
@@ -98,12 +99,17 @@ class ModelDIS(Model):
         if not self.dist_fun:
             raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
         # Consider future efficiency: broadcasting / working with posterior_results etc.
-        self.distances = torch.tensor([self.dist_fun(self.obs,x.named_variables['sample_obs'].value) for x in posterior.values])
+        def distance(trace):
+            #trace_obs = [v for v in trace.variables_observed if v.name != 'dummy']
+            trace_obs = [v.value for v in trace.variables_observable if v.name != 'dummy']
+            return self.dist_fun(self.obs, trace_obs)
+        self.distances = torch.tensor([distance(x) for x in posterior.values])
         posterior.sqd = self.distances**2
         log_w_contrib = -0.5 * posterior.sqd / self.epsilon**2.
         # Note - can't set posterior.weights directly (it's a property with no setter)
         # But can access the underlying variables in which weights is stored.
         posterior._categorical.logits += log_w_contrib
+        posterior._categorical.probs = np.exp(posterior._categorical.logits)
         return posterior
 
 
@@ -118,8 +124,8 @@ class ModelDIS(Model):
                 )
             sample = self.posterior(
                 num_traces=importance_sample_size,
-                inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,
-                observe={"bool_func": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
+                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
+                observe={"dummy": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
             )
             sample = self.update_DIS_posterior_weights(sample)
             w = sample.weights

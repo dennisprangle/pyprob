@@ -43,6 +43,7 @@ class InferenceEngine(enum.Enum):
     IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK = 1  # Type: IS; Importance sampling with proposals from inference network
     LIGHTWEIGHT_METROPOLIS_HASTINGS = 2  # Type: MCMC; Lightweight (single-site) Metropolis Hastings sampling, http://proceedings.mlr.press/v15/wingate11a/wingate11a.pdf and https://arxiv.org/abs/1507.00996
     RANDOM_WALK_METROPOLIS_HASTINGS = 3  # Type: MCMC; Lightweight Metropolis Hastings with single-site proposal kernels that depend on the value of the site
+    DISTILLING_IMPORTANCE_SAMPLING = 4 # Type IS; proposals from inference network, uses distance between observations and samples from proposal to update weights.
 
 
 class InferenceNetwork(enum.Enum):

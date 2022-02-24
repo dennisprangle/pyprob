@@ -16,3 +16,4 @@ from .von_mises import VonMises
 from .weibull import Weibull
 from .empirical import Empirical
 from .truncated_exponential import TruncatedExponential
+from .delta import Delta

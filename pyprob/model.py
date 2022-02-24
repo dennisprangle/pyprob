@@ -20,6 +20,7 @@ class Model():
     def __init__(self, name='Unnamed PyProb model', address_dict_file_name=None):
         super().__init__()
         self.name = name
+        self.dis_model = False
         self._inference_network = None
         if address_dict_file_name is None:
             self._address_dictionary = None
@@ -110,6 +111,13 @@ class Model():
         elif inference_engine == InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK:
             if self._inference_network is None:
                 raise RuntimeError('Cannot run inference engine IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK because no inference network for this model is available. Use learn_inference_network or load_inference_network first.')
+            with torch.no_grad():
+                posterior = self._traces(num_traces=num_traces, trace_mode=TraceMode.POSTERIOR, inference_engine=inference_engine, inference_network=self._inference_network, map_func=map_func, observe=observe, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
+            posterior.rename('Posterior, IC, traces: {:,}, train. traces: {:,}, ESS: {:,.2f}'.format(posterior.length, self._inference_network._total_train_traces, posterior.effective_sample_size))
+            posterior.add_metadata(op='posterior', num_traces=num_traces, inference_engine=str(inference_engine), effective_sample_size=posterior.effective_sample_size, likelihood_importance=likelihood_importance, train_traces=self._inference_network._total_train_traces)
+        elif inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+            if self._inference_network is None:
+                raise RuntimeError('Cannot run inference engine DISTILLING_IMPORTANCE_SAMPLING because no inference network for this model is available. Use learn_inference_network or load_inference_network first.')
             with torch.no_grad():
                 posterior = self._traces(num_traces=num_traces, trace_mode=TraceMode.POSTERIOR, inference_engine=inference_engine, inference_network=self._inference_network, map_func=map_func, observe=observe, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
             posterior.rename('Posterior, IC, traces: {:,}, train. traces: {:,}, ESS: {:,.2f}'.format(posterior.length, self._inference_network._total_train_traces, posterior.effective_sample_size))
