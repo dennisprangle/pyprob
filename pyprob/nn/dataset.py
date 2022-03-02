@@ -14,7 +14,7 @@ from collections import Counter, OrderedDict
 import random
 
 from .. import util
-from ..util import TraceMode, PriorInflation
+from ..util import InferenceEngine, TraceMode, PriorInflation
 from ..concurrency import ConcurrentShelf
 
 
@@ -48,17 +48,35 @@ class Batch():
 
 
 class OnlineDataset(Dataset):
-    def __init__(self, model, length=None, prior_inflation=PriorInflation.DISABLED):
+    def __init__(self, model, length=None, inference_engine = None, importance_sample_size = None, prior_inflation=PriorInflation.DISABLED):
         self._model = model
         if length is None:
             length = int(1e6)
         self._length = length
         self._prior_inflation = prior_inflation
+        self._trace_list = None
+        self._inference_engine = inference_engine
+        self._semi_online_dataset = None
+        self.importance_sample_size = importance_sample_size
 
     def __len__(self):
         return self._length
 
     def __getitem__(self, idx):
+        # Note this makes resampling default behaviour for DIS.
+        if self._inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+            if self._semi_online_dataset == None:
+                self._semi_online_dataset = self._model.posterior(
+                num_traces=self.importance_sample_size,
+                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
+                observe={"dummy": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
+                )
+                self._model.update_DIS_posterior_weights(self._semi_online_dataset)
+            # Is it quicker to assign ALL indices in advance and save them?
+            ind = torch.multinomial(self._semi_online_dataset.weights,1)
+            return  self._semi_online_dataset.values[ind]
+
+            
         return next(self._model._trace_generator(trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, prior_inflation=self._prior_inflation))
 
     @staticmethod
