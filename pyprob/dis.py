@@ -110,54 +110,30 @@ class ModelDIS(Model):
         # But can access the underlying variables in which weights is stored.
         posterior._categorical.logits += log_w_contrib
         posterior._categorical.probs = np.exp(posterior._categorical.logits)
+
+        # Update epsilon 
+        w = posterior.weights
+        upper_eps = self.epsilon
+        if upper_eps == np.inf:
+            # A finite value needed, so pick a sensible upper bound
+            upper_eps = torch.max(posterior.sqd).item()
+        new_epsilon = find_eps(posterior.sqd, w, self.epsilon, ess_target, upper_eps)
+        w = get_alternate_weights(posterior.sqd, w, self.epsilon, new_epsilon)
+        self.epsilon = new_epsilon
+        self.ess = posterior._effective_sample_size
+        posterior.dis_eps = self.epsilon
+
         return posterior
 
+    # def learn_inference_network(self, num_traces, num_traces_end=1000000000, inference_engine=None, importance_sample_size=None, inference_network=..., prior_inflation=..., dataset_dir=None, dataset_valid_dir=None, observe_embeddings=..., batch_size=64, valid_size=None, valid_every=None, optimizer_type=..., learning_rate_init=0.001, learning_rate_end=0.000001, learning_rate_scheduler_type=..., momentum=0.9, weight_decay=0, save_file_name_prefix=None, save_every_sec=600, pre_generate_layers=False, distributed_backend=None, distributed_params_sync_every_iter=10000, distributed_num_buckets=None, dataloader_offline_num_workers=0, stop_with_bad_loss=True, log_file_name=None, lstm_dim=512, lstm_depth=1, proposal_mixture_components=10):
+    #     return super().learn_inference_network(num_traces, num_traces_end, inference_engine, importance_sample_size, inference_network, prior_inflation, dataset_dir, dataset_valid_dir, observe_embeddings, batch_size, valid_size, valid_every, optimizer_type, learning_rate_init, learning_rate_end, learning_rate_scheduler_type, momentum, weight_decay, save_file_name_prefix, save_every_sec, pre_generate_layers, distributed_backend, distributed_params_sync_every_iter, distributed_num_buckets, dataloader_offline_num_workers, stop_with_bad_loss, log_file_name, lstm_dim, lstm_depth, proposal_mixture_components)
 
     def train(self, iterations=10, importance_sample_size=1000, ess_target=500, batch_size=100, nbatches=5, **kwargs):
         for i in range(iterations):
-            if self._inference_network is None:
-                self.learn_inference_network(
-                    num_traces=nbatches*batch_size,
-                    #observe_embeddings={'bool_func': {'dim': 1, 'depth': 1}},
-                    batch_size=batch_size,
-                    **kwargs
-                )
-            sample = self.posterior(
-                num_traces=importance_sample_size,
-                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
-                observe={"dummy": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
-            )
-            sample = self.update_DIS_posterior_weights(sample)
-            w = sample.weights
-            sqd = sample.sqd
-            upper_eps = self.epsilon
-            if upper_eps == np.inf:
-                # A finite value needed, so pick a sensible upper bound
-                upper_eps = torch.max(sqd).item()
-            new_epsilon = find_eps(sqd, w, self.epsilon, ess_target, upper_eps)
-            w = get_alternate_weights(sqd, w, self.epsilon, new_epsilon)
-            self.epsilon = new_epsilon
-            ess = effective_sample_size(w)
-            # TO DO: TRUNCATE WEIGHTS?
-            # Delete existing files so results not just appended to old ones
-            file_name = "pyprob_traces_training_batch"
-            if os.path.exists(file_name):
-                os.remove(file_name)
-            if os.path.exists("pyprob_hashes"):
-                os.remove("pyprob_hashes")
-            batch = Empirical(file_name=file_name)
-            # Resample importance sample to get a training batch
-            # TO DO: In the longer term, maybe allow 'learn_inference_network'
-            # to cope with a weighted training batch. I think this requires
-            # adding a sampler handling weights to 'inference_network.optimize')
-            indices = torch.multinomial(w, batch_size*nbatches, replacement=True)
-            for j in indices:
-                batch.add(sample.values[j], 0.)
-            batch._shelf['__length'] = batch_size*nbatches
-            batch.close()
             # TO DO: suppress messages about OfflineDataset creation
             self.learn_inference_network(
-                num_traces=nbatches*batch_size, # TO DO: is this correct???
+                num_traces=nbatches*batch_size,
+                importance_sample_size=importance_sample_size,
                 dataset_dir=".",
                 batch_size=batch_size,
                 **kwargs
@@ -165,7 +141,7 @@ class ModelDIS(Model):
             # TO DO: Improve reporting results?
             print(f"Training iterations {i+1} "
                   f" epsilon {self.epsilon:.2f} "
-                  f" ESS {ess:.1f}")
+                  f" ESS {self.ess:.1f}")
 
     def save(self, file_name):
         self.save_inference_network(file_name)

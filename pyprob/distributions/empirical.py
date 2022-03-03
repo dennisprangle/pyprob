@@ -71,7 +71,8 @@ class Empirical(Distribution):
             self._categorical = torch.distributions.Categorical(logits=util.to_tensor(self.log_weights, dtype=torch.float64))
             self._check_uniform_weights()
             weights = self._categorical.probs
-            self._effective_sample_size = 1. / weights.pow(2).sum()
+            self._effective_sample_size = weights.sum() / weights.pow(2).sum()
+            self.dis_eps = None
             name = 'Concatenated empirical, length: {:,}, ESS: {:,.2f}'.format(self._length, self._effective_sample_size)
             # self._metadata.append('Begin concatenate empiricals ({})'.format(len(self._concat_empiricals)))
             # for i, emp in enumerate(self._concat_empiricals):
