@@ -6,6 +6,7 @@ import os
 from torch.utils.data import Dataset
 from . import InferenceEngine, Model, TraceMode
 from .distributions import Empirical
+from pyprob.util import InferenceEngine
 
 def effective_sample_size(w):
     """Effective sample size of weights
@@ -87,6 +88,7 @@ class ModelDIS(Model):
         self.distances = None
         self.dist_fun = dist_fun
         self.obs = obs
+        self.ess = 0
 
     # def _traces(self, *args, **kwargs):
     #     # Set observable values whenever _traces is run, even from 'prior' or 'posterior'
@@ -94,7 +96,7 @@ class ModelDIS(Model):
     #     kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
     #     return super()._traces(*args, **kwargs)
 
-    def update_DIS_posterior_weights(self, posterior):
+    def update_DIS_posterior_weights(self, posterior, ess_target = 500):
         # Modify weights to take distance into account
         if not self.dist_fun:
             raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
@@ -134,10 +136,12 @@ class ModelDIS(Model):
             self.learn_inference_network(
                 num_traces=nbatches*batch_size,
                 importance_sample_size=importance_sample_size,
-                dataset_dir=".",
+                ess_target = ess_target,
+                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
                 batch_size=batch_size,
+                observe_embeddings={"dummy":{'dim':1, 'depth':1}},
                 **kwargs
-            )
+                )
             # TO DO: Improve reporting results?
             print(f"Training iterations {i+1} "
                   f" epsilon {self.epsilon:.2f} "
