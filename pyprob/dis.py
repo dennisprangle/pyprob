@@ -82,7 +82,7 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
 
 class ModelDIS(Model):
     def __init__(self, epsilon=np.inf, obs = None, dist_fun = None, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(kwargs)
         self.dis_model = True
         self.epsilon = epsilon
         self.distances = None
@@ -103,7 +103,7 @@ class ModelDIS(Model):
         # Consider future efficiency: broadcasting / working with posterior_results etc.
         def distance(trace):
             #trace_obs = [v for v in trace.variables_observed if v.name != 'dummy']
-            trace_obs = [v.value for v in trace.variables_observable if v.name != 'dummy']
+            trace_obs = [v.value for v in trace.variables_observed if v.name != 'dummy']
             return self.dist_fun(self.obs, trace_obs)
         self.distances = torch.tensor([distance(x) for x in posterior.values])
         posterior.sqd = self.distances**2
