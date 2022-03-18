@@ -118,7 +118,8 @@ class Model():
         elif inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
             if self._inference_network is None:
                 warnings.warn('No inference network specified. Sampling from prior instead.')
-                posterior = self._traces(num_traces=num_traces, trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, inference_engine=inference_engine, inference_network=self._inference_network, map_func=map_func, observe=observe, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
+                # Note: Observe = None in below. This is necessary so that init_traces correctly functions and observables are correctly embedded.
+                posterior = self._traces(num_traces=num_traces, trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, inference_engine=inference_engine, inference_network=self._inference_network, map_func=map_func, observe=None, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
                 posterior.rename('Prior, traces: {:,}'.format(posterior.length))
                 posterior.add_metadata(op='prior', num_traces=num_traces, likelihood_importance=likelihood_importance)
             else: 

@@ -57,9 +57,17 @@ class OnlineDataset(Dataset):
         self._trace_list = None
         self._inference_engine = inference_engine
         self._inference_network = inference_network
-        self._semi_online_dataset = None
         self._importance_sample_size = importance_sample_size
         self._ess_target = ess_target
+        self._semi_online_dataset = None
+        if inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
+            self._semi_online_dataset = self._model.posterior(
+                num_traces=self._importance_sample_size,
+                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
+                observe={"dummy": 1})
+            self._model.update_DIS_weights(self._semi_online_dataset, self._ess_target)
+
+
 
     def __len__(self):
         return self._length
@@ -67,15 +75,15 @@ class OnlineDataset(Dataset):
     def __getitem__(self, idx):
         # Note this makes resampling default behaviour for DIS.
         if self._inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
-            if self._inference_network is None:
-                return next(self._model._trace_generator(trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, prior_inflation=self._prior_inflation))
-            elif self._semi_online_dataset is None:
-                self._semi_online_dataset = self._model.posterior(
-                num_traces=self._importance_sample_size,
-                inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
-                observe={"dummy": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
-                )
-                self._model.update_DIS_posterior_weights(self._semi_online_dataset, self._ess_target)
+            # if self._semi_online_dataset is None:
+            #     if self._inference_network is None:
+            #         return next(self._model._trace_generator(trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, prior_inflation=self._prior_inflation))
+            #     else:
+            #         self._semi_online_dataset = self._model.posterior(
+            #         num_traces=self._importance_sample_size,
+            #         inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
+            #         observe={"dummy": 1} # TO DO: remove need for this to be hardcoded in (e.g. create inference network without observation)
+            #         )
             # Is it quicker to assign ALL indices in advance and save them?
             ind = torch.multinomial(self._semi_online_dataset.weights,1)
             return  self._semi_online_dataset.values[ind]

@@ -96,7 +96,7 @@ class ModelDIS(Model):
     #     kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
     #     return super()._traces(*args, **kwargs)
 
-    def update_DIS_posterior_weights(self, posterior, ess_target = 500):
+    def update_DIS_weights(self, posterior, ess_target = 500):
         # Modify weights to take distance into account
         if not self.dist_fun:
             raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
