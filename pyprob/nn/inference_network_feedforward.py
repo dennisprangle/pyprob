@@ -73,7 +73,7 @@ class InferenceNetworkFeedForward(InferenceNetwork):
             example_trace = sub_batch[0]
             observe_embedding = self._embed_observe(sub_batch)
             sub_batch_loss = 0.
-            for time_step in range(example_trace.length_controlled):
+            for time_step in range(example_trace.length_controlled): # This seems like it prevents variable-length inputs
                 address = example_trace.variables_controlled[time_step].address
                 if address not in self._layers_proposal:
                     print(colored('Address unknown by inference network: {}'.format(address), 'red', attrs=['bold']))
