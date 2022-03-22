@@ -96,7 +96,7 @@ class ModelDIS(Model):
     #     kwargs['trace_mode'] = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
     #     return super()._traces(*args, **kwargs)
 
-    def update_DIS_posterior_weights(self, posterior, ess_target = 500):
+    def update_DIS_weights(self, posterior, ess_target = 500):
         # Modify weights to take distance into account
         if not self.dist_fun:
             raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
@@ -122,7 +122,8 @@ class ModelDIS(Model):
         new_epsilon = find_eps(posterior.sqd, w, self.epsilon, ess_target, upper_eps)
         w = get_alternate_weights(posterior.sqd, w, self.epsilon, new_epsilon)
         self.epsilon = new_epsilon
-        self.ess = posterior._effective_sample_size
+        # self.ess = posterior._effective_sample_size # Should set this maybe...
+        self.ess = effective_sample_size(w)
         posterior.dis_eps = self.epsilon
 
         return posterior
@@ -142,6 +143,7 @@ class ModelDIS(Model):
                 observe_embeddings={"dummy":{'dim':1, 'depth':1}},
                 **kwargs
                 )
+
             # TO DO: Improve reporting results?
             print(f"Training iterations {i+1} "
                   f" epsilon {self.epsilon:.2f} "

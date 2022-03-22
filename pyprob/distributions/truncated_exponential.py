@@ -12,7 +12,7 @@ class TruncatedExponential(Distribution):
         self._high = util.to_tensor(high)
         self._exponential_non_truncated = Exponential(self._rate_non_truncated)
         torch_expo = torch.distributions.Exponential(self._rate_non_truncated, validate_args=False)
-        self._renorm_factor = torch.ones(1) / (torch_expo.cdf(self._high) - torch_expo.cdf(self._low))
+        self._renorm_factor = util.to_tensor(torch.ones(1)) / (torch_expo.cdf(self._high) - torch_expo.cdf(self._low))
         self._rate = None
         self._batch_length = 1
         batch_shape = self._rate_non_truncated.size()
