@@ -80,9 +80,8 @@ class Model():
             print('Time spent  | Time remain.| Progress             | {} | {} | Traces/sec'.format('Trace'.ljust(len_str_num_traces * 2 + 1), 'ESS'.ljust(len_str_num_traces+2)))
             prev_duration = 0
 
-        count = 0
         
-        for trace in dataloader:
+        for (count, trace) in enumerate(dataloader):
             if trace_mode == TraceMode.PRIOR:
                 log_weight = 0 # Log weight, should probably be 0. 
             else:
