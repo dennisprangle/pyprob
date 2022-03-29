@@ -6,10 +6,12 @@ import cProfile
 
 from pyprob.dis import ModelDIS
 from showerSim import invMass_ginkgo
+from torch.utils.data import DataLoader
 from pyprob.nn.dataset import OnlineDataset
 from pyprob.util import InferenceEngine
 from pyprob.util import to_tensor
 from pyprob import Model
+from pyprob.model import Parallel_Generator
 import math
 from pyprob.distributions import Normal
 from pyprob.distributions.delta import Delta
@@ -138,5 +140,23 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
                                     obs_leaves=obs_leaves,
                                     dist_fun=sinkhorn_t)
 
-if __name__ == '__main__':
-    simulatorginkgo.train(iterations=2, importance_sample_size=100)
+
+# dataset = Parallel_Generator(simulatorginkgo, importance_sample_size=1000, observe ={'dummy':1})
+# dataloader = DataLoader(dataset, num_workers=12,batch_size= None)
+#
+# for (i,j) in enumerate(dataloader):
+#     if (i+1)%100 == 0:
+#         print(i+1)
+
+
+
+#torch.multiprocessing.set_sharing_strategy("file_system")
+
+traces = simulatorginkgo._dis_traces(num_traces = 1000, observe = {'dummy':1}, num_workers = 12, batch_size = 100)
+print(traces[0])
+
+
+
+# if __name__ == '__main__':
+#     simulatorginkgo.train(iterations=2, importance_sample_size=5000)
+#     simulatorginkgo.save_inference_network('ginkgo_fixed_network_2')

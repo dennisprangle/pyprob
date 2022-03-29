@@ -9,7 +9,7 @@ import random
 import warnings
 from termcolor import colored
 from torch.utils.data import Dataset, DataLoader
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 from .distributions import Empirical
 from . import util, state, TraceMode, PriorInflation, InferenceEngine, InferenceNetwork, Optimizer, LearningRateScheduler, AddressDictionary
@@ -17,21 +17,34 @@ from .nn import InferenceNetwork as InferenceNetworkBase
 from .nn import OnlineDataset, OfflineDataset, InferenceNetworkFeedForward, InferenceNetworkLSTM
 from .remote import ModelServer
 
+
+
 class Parallel_Generator(Dataset):
     """
     Generates datasets for parallelisation by PyTorch dataloader methods.
     """
-    def __init__(self, model, importance_sample_size = None, observe = None):
+    def __init__(self, model, importance_sample_size = None, observe = None, *args, **kwargs):
         self._model = model
         self._generator = model._trace_generator
         self._inference_network = model._inference_network
         self._length = importance_sample_size
         self._observe = observe
+        # self._args = args
+        # self._kwargs = kwargs
+        # if self._model._inference_network:
+        #     state._init_traces(func=self._model.forward, trace_mode=TraceMode.POSTERIOR, inference_engine=inference_engine, inference_network=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK, observe=observe)
+        # else:
+        #     state._init_traces(func=self._model.forward,trace_mode=TraceMode.PRIOR)
+
     
     def __len__(self):
         return self._length
 
     def __getitem__(self, idx):
+        # state._begin_trace()
+        # result = self._model.forward(*self._args, **self._kwargs)
+        # trace = state._end_trace(result)
+        # return trace
         if self._model._inference_network:
             return next(self._generator(trace_mode=TraceMode.POSTERIOR, inference_engine = InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK, inference_network = self._inference_network, observe = self._observe))
         else:
@@ -65,14 +78,48 @@ class Model():
             trace = state._end_trace(result)
             yield trace
 
-    def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.PRIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=mp.cpu_count(), *args, **kwargs):
-        dataset = Parallel_Generator(self, importance_sample_size=num_traces, observe = {'dummy':1})
+    def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.PRIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=None, batch_size=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=mp.cpu_count(), *args, **kwargs):
+        # sharing_strategy = "file_system"
+        # mp.set_sharing_strategy(sharing_strategy)
+        #
+        # def worker_init_fn(worker_id):
+        #     mp.set_sharing_strategy(sharing_strategy)
+
+
+
+        dataset = Parallel_Generator(self, importance_sample_size=num_traces, observe = observe)
+        trace_list = mp.Manager().list()
         traces = Empirical(file_name=file_name) # From file.
         if map_func is None: # Some function of the trace... e.g. summary of data?
             map_func = lambda trace: trace
         log_weights = util.to_tensor(torch.zeros(num_traces))
         #log_weights = util.to_tensor(torch.zeros(num_traces)) # Initialisation -> weights are 1, logs 0.
-        dataloader = DataLoader(dataset, num_workers = num_workers, batch_size = None)
+
+        def collate_fn(trace_batch):
+            if not batch_size:
+                trace = trace_batch
+                if trace_mode == TraceMode.PRIOR:
+                    log_weight = 0
+                else:
+                    log_weight = trace.log_importance_weight
+                if util.has_nan_or_inf(log_weight):
+                    warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
+                else:
+                    #traces.add(map_func(trace), log_weight)
+                    trace_list.append((map_func(trace), log_weight))
+            else:
+                for trace in trace_batch:
+                    if trace_mode == TraceMode.PRIOR:
+                        log_weight = 0 # Log weight, should probably be 0.
+                    else:
+                        log_weight = trace.log_importance_weight
+                    if util.has_nan_or_inf(log_weight):
+                        warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
+                    else:
+                        #traces.add(map_func(trace), log_weight)
+                        trace_list.append((map_func(trace), log_weight))
+
+        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn = collate_fn)
 
         time_start = time.time()
         if (util._verbosity > 1) and not silent: # Logs progress.
@@ -80,19 +127,19 @@ class Model():
             print('Time spent  | Time remain.| Progress             | {} | {} | Traces/sec'.format('Trace'.ljust(len_str_num_traces * 2 + 1), 'ESS'.ljust(len_str_num_traces+2)))
             prev_duration = 0
 
-        
         for (count, trace) in enumerate(dataloader):
-            if trace_mode == TraceMode.PRIOR:
-                log_weight = 0 # Log weight, should probably be 0. 
-            else:
-                log_weight = trace.log_importance_weight
-            if util.has_nan_or_inf(log_weight):
-                warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
-                if i > 0:
-                    log_weights[count] = log_weights[-1]
-            else:
-                traces.add(map_func(trace), log_weight)
-                log_weights[count] = log_weight
+            # if trace_mode == TraceMode.PRIOR:
+            #     log_weight = 0 # Log weight, should probably be 0.
+            # else:
+            #     log_weight = trace.log_importance_weight
+            # if util.has_nan_or_inf(log_weight):
+            #     warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
+            #     if i > 0:
+            #         log_weights[count] = log_weights[-1]
+            # else:
+            #     #trace_list.append(map_func(trace))
+            #     #traces.add(map_func(trace), log_weight)
+            #     log_weights[count] = log_weight
 
             if (util._verbosity > 1) and not silent:
                 duration = time.time() - time_start
@@ -108,7 +155,7 @@ class Model():
         if (util._verbosity > 1) and not silent:
             print()
         traces.finalize()
-        return traces
+        return trace_list
 
 
 
