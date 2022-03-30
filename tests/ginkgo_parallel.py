@@ -152,8 +152,8 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
 
 #torch.multiprocessing.set_sharing_strategy("file_system")
 
-traces = simulatorginkgo._dis_traces(num_traces = 1000, observe = {'dummy':1}, num_workers = 12, batch_size = 100)
-print(traces[0])
+traces = simulatorginkgo._dis_traces(num_traces = 1000, observe = {'dummy':1}, num_workers = 4, batch_size = 20)
+#print(traces[0])
 
 
 

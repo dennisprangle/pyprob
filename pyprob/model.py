@@ -79,47 +79,23 @@ class Model():
             yield trace
 
     def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.PRIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=None, batch_size=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=mp.cpu_count(), *args, **kwargs):
-        # sharing_strategy = "file_system"
-        # mp.set_sharing_strategy(sharing_strategy)
-        #
-        # def worker_init_fn(worker_id):
-        #     mp.set_sharing_strategy(sharing_strategy)
+        sharing_strategy = "file_system"
+        mp.set_sharing_strategy(sharing_strategy)
+        
+        def worker_init_fn(worker_id):
+            mp.set_sharing_strategy(sharing_strategy)
 
-
-
-        dataset = Parallel_Generator(self, importance_sample_size=num_traces, observe = observe)
-        trace_list = mp.Manager().list()
+        dataset = Parallel_Generator(self, importance_sample_size=num_traces, observe=observe)
         traces = Empirical(file_name=file_name) # From file.
         if map_func is None: # Some function of the trace... e.g. summary of data?
             map_func = lambda trace: trace
         log_weights = util.to_tensor(torch.zeros(num_traces))
         #log_weights = util.to_tensor(torch.zeros(num_traces)) # Initialisation -> weights are 1, logs 0.
 
-        def collate_fn(trace_batch):
-            if not batch_size:
-                trace = trace_batch
-                if trace_mode == TraceMode.PRIOR:
-                    log_weight = 0
-                else:
-                    log_weight = trace.log_importance_weight
-                if util.has_nan_or_inf(log_weight):
-                    warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
-                else:
-                    #traces.add(map_func(trace), log_weight)
-                    trace_list.append((map_func(trace), log_weight))
-            else:
-                for trace in trace_batch:
-                    if trace_mode == TraceMode.PRIOR:
-                        log_weight = 0 # Log weight, should probably be 0.
-                    else:
-                        log_weight = trace.log_importance_weight
-                    if util.has_nan_or_inf(log_weight):
-                        warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
-                    else:
-                        #traces.add(map_func(trace), log_weight)
-                        trace_list.append((map_func(trace), log_weight))
+        def collate_fn(batch):
+            return batch
 
-        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn = collate_fn)
+        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn = collate_fn, worker_init_fn=worker_init_fn, persistent_workers=True)
 
         time_start = time.time()
         if (util._verbosity > 1) and not silent: # Logs progress.
@@ -127,29 +103,37 @@ class Model():
             print('Time spent  | Time remain.| Progress             | {} | {} | Traces/sec'.format('Trace'.ljust(len_str_num_traces * 2 + 1), 'ESS'.ljust(len_str_num_traces+2)))
             prev_duration = 0
 
-        for (count, trace) in enumerate(dataloader):
-            # if trace_mode == TraceMode.PRIOR:
-            #     log_weight = 0 # Log weight, should probably be 0.
-            # else:
-            #     log_weight = trace.log_importance_weight
-            # if util.has_nan_or_inf(log_weight):
-            #     warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
-            #     if i > 0:
-            #         log_weights[count] = log_weights[-1]
-            # else:
-            #     #trace_list.append(map_func(trace))
-            #     #traces.add(map_func(trace), log_weight)
-            #     log_weights[count] = log_weight
-
+        counter = mp.Value('I',0)
+        lock = mp.Lock()
+        trace_list = mp.Manager().list()
+        for batch in dataloader:
+            for trace in batch:
+                with lock:
+                    trace_list.append(trace)
+                # if trace_mode == TraceMode.PRIOR:
+                #     log_weight = 0. # Log weight, should probably be 0. 
+                # else:
+                #     log_weight = trace.log_importance_weight
+                # if util.has_nan_or_inf(log_weight):
+                #     warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
+                #     if count > 0:
+                #         log_weights[count] = log_weights[-1]
+                # else:
+                #     traces.add(map_func(trace), log_weight)
+                #     log_weights[count] = log_weight
+                with counter.get_lock():
+                    counter.value +=1
+                    traces_so_far = counter.value
+            
             if (util._verbosity > 1) and not silent:
                 duration = time.time() - time_start
-                if (duration - prev_duration > util._print_refresh_rate) or (count == num_traces - 1):
+                if (duration - prev_duration > util._print_refresh_rate) or (traces_so_far == num_traces):
                     prev_duration = duration
-                    traces_per_second = (count + 1) / duration
-                    effective_sample_size = float(1./torch.distributions.Categorical(logits=log_weights[:count+1]).probs.pow(2).sum())
+                    traces_per_second = (traces_so_far) / duration
+                    effective_sample_size = float(1./torch.distributions.Categorical(logits=log_weights[:traces_so_far]).probs.pow(2).sum())
                     if util.has_nan_or_inf(effective_sample_size):
                         effective_sample_size = 0
-                    print('{} | {} | {} | {}/{} | {} | {:,.2f}       '.format(util.days_hours_mins_secs_str(duration), util.days_hours_mins_secs_str((num_traces - count) / traces_per_second), util.progress_bar(count+1, num_traces), str(count+1).rjust(len_str_num_traces), num_traces, '{:.2f}'.format(effective_sample_size).rjust(len_str_num_traces+2), traces_per_second), end='\r')
+                    print('{} | {} | {} | {}/{} | {} | {:,.2f}       '.format(util.days_hours_mins_secs_str(duration), util.days_hours_mins_secs_str((num_traces - traces_so_far+1) / traces_per_second), util.progress_bar(traces_so_far, num_traces), str(traces_so_far).rjust(len_str_num_traces), num_traces, '{:.2f}'.format(effective_sample_size).rjust(len_str_num_traces+2), traces_per_second), end='\r')
                     sys.stdout.flush()
 
         if (util._verbosity > 1) and not silent:
