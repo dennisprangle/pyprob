@@ -9,7 +9,7 @@ import random
 import warnings
 from termcolor import colored
 from torch.utils.data import Dataset, DataLoader
-import torch.multiprocessing as mp
+import multiprocess as mp
 
 from .distributions import Empirical
 from . import util, state, TraceMode, PriorInflation, InferenceEngine, InferenceNetwork, Optimizer, LearningRateScheduler, AddressDictionary
@@ -17,8 +17,22 @@ from .nn import InferenceNetwork as InferenceNetworkBase
 from .nn import OnlineDataset, OfflineDataset, InferenceNetworkFeedForward, InferenceNetworkLSTM
 from .remote import ModelServer
 
+trace_list = mp.Manager().list()
+counter = mp.Value('I',0)
 
 
+
+def unwrap_make_trace(self, index, *args, **kwargs):
+    print('entering unwrap')
+    util.seed()
+    state._begin_trace()
+    result = self.forward(*args, **kwargs)
+    trace = state._end_trace(result)
+    trace_list[index] = (trace, trace.log_prob)
+    with counter.get_lock():
+        counter.value += 1
+        print(counter.value)
+    
 class Parallel_Generator(Dataset):
     """
     Generates datasets for parallelisation by PyTorch dataloader methods.
@@ -78,68 +92,82 @@ class Model():
             trace = state._end_trace(result)
             yield trace
 
+
     def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.PRIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=None, batch_size=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=mp.cpu_count(), *args, **kwargs):
-        sharing_strategy = "file_system"
-        mp.set_sharing_strategy(sharing_strategy)
+        # if trace_mode == TraceMode.PRIOR:
+        #     generator = self._trace_generator(trace_mode=TraceMode.PRIOR)
+        # else:
+        #     generator = self._trace_generator(trace_mode=TraceMode.POSTERIOR, inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,observe= observe, inference_network=inference_network)
+
+        state._init_traces(func=self.forward, trace_mode=trace_mode, inference_engine=inference_engine, inference_network=inference_network, observe=observe, address_dictionary=self._address_dictionary)
+
+        trace_list = mp.Manager().list([(None,0) for _ in range(num_traces)])
+
+
+        # def make_trace(index):
+        #     util.seed()
+        #     state._begin_trace()
+        #     result = self.forward(*args, **kwargs)
+        #     trace = state._end_trace(result)
+        #     trace_list[index] = (map_func(trace), trace.log_prob)
+
+
+
+        # def map_gen(index):
+        #     util.seed()
+        #     trace = next(generator)
+        #     trace_list[index] = (map_func(trace), trace.log_prob)
+
+        pool = mp.Pool(num_workers)
+        #pool.map(func=make_trace, iterable=range(num_traces))
+        pool.starmap(func=unwrap_make_trace, iterable=zip([self]*num_traces, list(range(num_traces))))
+        pool.close()
+        pool.join()
         
-        def worker_init_fn(worker_id):
-            mp.set_sharing_strategy(sharing_strategy)
-
-        dataset = Parallel_Generator(self, importance_sample_size=num_traces, observe=observe)
-        traces = Empirical(file_name=file_name) # From file.
-        if map_func is None: # Some function of the trace... e.g. summary of data?
-            map_func = lambda trace: trace
-        log_weights = util.to_tensor(torch.zeros(num_traces))
-        #log_weights = util.to_tensor(torch.zeros(num_traces)) # Initialisation -> weights are 1, logs 0.
-
-        def collate_fn(batch):
-            return batch
-
-        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn = collate_fn, worker_init_fn=worker_init_fn, persistent_workers=True)
-
         time_start = time.time()
         if (util._verbosity > 1) and not silent: # Logs progress.
             len_str_num_traces = len(str(num_traces))
             print('Time spent  | Time remain.| Progress             | {} | {} | Traces/sec'.format('Trace'.ljust(len_str_num_traces * 2 + 1), 'ESS'.ljust(len_str_num_traces+2)))
             prev_duration = 0
 
-        counter = mp.Value('I',0)
-        lock = mp.Lock()
-        trace_list = mp.Manager().list()
-        for batch in dataloader:
-            for trace in batch:
-                with lock:
-                    trace_list.append(trace)
-                # if trace_mode == TraceMode.PRIOR:
-                #     log_weight = 0. # Log weight, should probably be 0. 
-                # else:
-                #     log_weight = trace.log_importance_weight
-                # if util.has_nan_or_inf(log_weight):
-                #     warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
-                #     if count > 0:
-                #         log_weights[count] = log_weights[-1]
-                # else:
-                #     traces.add(map_func(trace), log_weight)
-                #     log_weights[count] = log_weight
-                with counter.get_lock():
-                    counter.value +=1
-                    traces_so_far = counter.value
+        # counter = mp.Value('I',0)
+        # lock = mp.Lock()
+        # trace_list = mp.Manager().list()
+        # for batch in dataloader:
+        #     for trace in batch:
+        #         with lock:
+        #             trace_list.append(trace)
+        #         # if trace_mode == TraceMode.PRIOR:
+        #         #     log_weight = 0. # Log weight, should probably be 0. 
+        #         # else:
+        #         #     log_weight = trace.log_importance_weight
+        #         # if util.has_nan_or_inf(log_weight):
+        #         #     warnings.warn('Encountered trace with nan, inf, or -inf log_weight. Discarding trace.')
+        #         #     if count > 0:
+        #         #         log_weights[count] = log_weights[-1]
+        #         # else:
+        #         #     traces.add(map_func(trace), log_weight)
+        #         #     log_weights[count] = log_weight
+        #         with counter.get_lock():
+        #             counter.value +=1
+        #             traces_so_far = counter.value
             
-            if (util._verbosity > 1) and not silent:
-                duration = time.time() - time_start
-                if (duration - prev_duration > util._print_refresh_rate) or (traces_so_far == num_traces):
-                    prev_duration = duration
-                    traces_per_second = (traces_so_far) / duration
-                    effective_sample_size = float(1./torch.distributions.Categorical(logits=log_weights[:traces_so_far]).probs.pow(2).sum())
-                    if util.has_nan_or_inf(effective_sample_size):
-                        effective_sample_size = 0
-                    print('{} | {} | {} | {}/{} | {} | {:,.2f}       '.format(util.days_hours_mins_secs_str(duration), util.days_hours_mins_secs_str((num_traces - traces_so_far+1) / traces_per_second), util.progress_bar(traces_so_far, num_traces), str(traces_so_far).rjust(len_str_num_traces), num_traces, '{:.2f}'.format(effective_sample_size).rjust(len_str_num_traces+2), traces_per_second), end='\r')
-                    sys.stdout.flush()
+        #     if (util._verbosity > 1) and not silent:
+        #         duration = time.time() - time_start
+        #         if (duration - prev_duration > util._print_refresh_rate) or (traces_so_far == num_traces):
+        #             prev_duration = duration
+        #             traces_per_second = (traces_so_far) / duration
+        #             effective_sample_size = float(1./torch.distributions.Categorical(logits=log_weights[:traces_so_far]).probs.pow(2).sum())
+        #             if util.has_nan_or_inf(effective_sample_size):
+        #                 effective_sample_size = 0
+        #             print('{} | {} | {} | {}/{} | {} | {:,.2f}       '.format(util.days_hours_mins_secs_str(duration), util.days_hours_mins_secs_str((num_traces - traces_so_far+1) / traces_per_second), util.progress_bar(traces_so_far, num_traces), str(traces_so_far).rjust(len_str_num_traces), num_traces, '{:.2f}'.format(effective_sample_size).rjust(len_str_num_traces+2), traces_per_second), end='\r')
+        #             sys.stdout.flush()
 
         if (util._verbosity > 1) and not silent:
             print()
-        traces.finalize()
-        return trace_list
+        for trace, log_prob in trace_list:
+            traces.add(trace, log_prob)
+        return traces
 
 
 
