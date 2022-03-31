@@ -8,11 +8,12 @@ from pyprob.dis import ModelDIS
 from showerSim import invMass_ginkgo
 from torch.utils.data import DataLoader
 from pyprob.nn.dataset import OnlineDataset
-from pyprob.util import InferenceEngine
+from pyprob.util import InferenceEngine, TraceMode
 from pyprob.util import to_tensor
 from pyprob import Model
 from pyprob.model import Parallel_Generator
 import math
+import time
 from pyprob.distributions import Normal
 from pyprob.distributions.delta import Delta
 
@@ -151,9 +152,12 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
 
 
 #torch.multiprocessing.set_sharing_strategy("file_system")
-
-traces = simulatorginkgo._dis_traces(num_traces = 1000, observe = {'dummy':1}, num_workers = 4, batch_size = 20)
-#print(traces[0])
+simulatorginkgo.train(iterations=1, importance_sample_size=5000)
+start = time.time()
+traces = simulatorginkgo._dis_traces(num_traces = 200, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 8)
+#traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
+total = time.time() - start
+print('time taken = ', total, ' num_traces =', len(traces),' first trace=',traces[0])
 
 
 

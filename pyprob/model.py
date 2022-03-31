@@ -98,11 +98,39 @@ class Model():
         #     generator = self._trace_generator(trace_mode=TraceMode.PRIOR)
         # else:
         #     generator = self._trace_generator(trace_mode=TraceMode.POSTERIOR, inference_engine=InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,observe= observe, inference_network=inference_network)
-
+        if map_func is None: # Some function of the trace... e.g. summary of data?
+            map_func = lambda trace: trace
+        traces = Empirical(file_name=file_name)
         state._init_traces(func=self.forward, trace_mode=trace_mode, inference_engine=inference_engine, inference_network=inference_network, observe=observe, address_dictionary=self._address_dictionary)
 
         trace_list = mp.Manager().list([(None,0) for _ in range(num_traces)])
+        chunk_size, remainder = divmod(num_traces, num_workers)
 
+        if not remainder:
+            chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
+        else:
+            chunk_size = num_traces // (num_workers -1)
+            chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
+            chunks.append(range(num_traces - remainder, num_traces))
+
+        def make_trace(chunk, L):
+            util.seed()
+            for i in chunk:
+                state._begin_trace()
+                result = self.forward(*args, **kwargs)
+                trace = state._end_trace(result)
+                L[i] = (map_func(trace), trace.log_prob)
+
+        processes = [mp.Process(target=make_trace, args=(chunk, trace_list)) for chunk in chunks]
+
+        start = time.time()
+        for p in processes:
+            p.start()
+
+        for p in processes:
+            p.join()
+        
+        print('trace_time=', time.time()-start)
 
         # def make_trace(index):
         #     util.seed()
@@ -118,11 +146,11 @@ class Model():
         #     trace = next(generator)
         #     trace_list[index] = (map_func(trace), trace.log_prob)
 
-        pool = mp.Pool(num_workers)
-        #pool.map(func=make_trace, iterable=range(num_traces))
-        pool.starmap(func=unwrap_make_trace, iterable=zip([self]*num_traces, list(range(num_traces))))
-        pool.close()
-        pool.join()
+        # pool = mp.Pool(num_workers)
+        # #pool.map(func=make_trace, iterable=range(num_traces))
+        # pool.starmap(func=unwrap_make_trace, iterable=zip([self]*num_traces, list(range(num_traces))))
+        # pool.close()
+        # pool.join()
         
         time_start = time.time()
         if (util._verbosity > 1) and not silent: # Logs progress.
@@ -167,7 +195,8 @@ class Model():
             print()
         for trace, log_prob in trace_list:
             traces.add(trace, log_prob)
-        return traces
+        traces.finalize()
+        return trace_list
 
 
 
