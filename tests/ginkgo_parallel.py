@@ -152,13 +152,13 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
 
 
 #torch.multiprocessing.set_sharing_strategy("file_system")
-simulatorginkgo.train(iterations=1, importance_sample_size=5000)
+#simulatorginkgo.train(iterations=1, importance_sample_size=5000)
 start = time.time()
-traces = simulatorginkgo._dis_traces(num_traces = 200, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 8)
+traces = simulatorginkgo._dis_traces(num_traces = 5000, trace_mode=TraceMode.PRIOR,observe = {'dummy':1}, num_workers = 4)
+#traces = simulatorginkgo._dis_traces(num_traces = 200, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 8)
 #traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
 total = time.time() - start
-print('time taken = ', total, ' num_traces =', len(traces),' first trace=',traces[0])
-
+print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0][0])
 
 
 # if __name__ == '__main__':

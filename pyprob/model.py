@@ -1,5 +1,6 @@
 # Some annotations by Sammy (occasional speculation)
 
+from py import process
 import torch
 import time
 import sys
@@ -9,7 +10,7 @@ import random
 import warnings
 from termcolor import colored
 from torch.utils.data import Dataset, DataLoader
-import multiprocess as mp
+import multiprocessing as mp
 
 from .distributions import Empirical
 from . import util, state, TraceMode, PriorInflation, InferenceEngine, InferenceNetwork, Optimizer, LearningRateScheduler, AddressDictionary
@@ -103,8 +104,14 @@ class Model():
         traces = Empirical(file_name=file_name)
         state._init_traces(func=self.forward, trace_mode=trace_mode, inference_engine=inference_engine, inference_network=inference_network, observe=observe, address_dictionary=self._address_dictionary)
 
-        trace_list = mp.Manager().list([(None,0) for _ in range(num_traces)])
+        #trace_batches = mp.Manager().list()
         chunk_size, remainder = divmod(num_traces, num_workers)
+
+        # manager = mp.Manager()
+        # traces_1 = manager.list()
+        # traces_2 = manager.list()
+        # traces_3 = manager.list()
+        # traces_4 = manager.list()
 
         if not remainder:
             chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
@@ -113,22 +120,46 @@ class Model():
             chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
             chunks.append(range(num_traces - remainder, num_traces))
 
-        def make_trace(chunk, L):
+        # def make_trace(chunk, L):
+        #     util.seed()
+        #     for i in chunk:
+        #         state._begin_trace()
+        #         result = self.forward(*args, **kwargs)
+        #         trace = state._end_trace(result)
+        #         L.put((map_func(trace), trace.log_prob))
+
+        def make_trace(chunk, conn):
             util.seed()
+            L = []
             for i in chunk:
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
-                L[i] = (map_func(trace), trace.log_prob)
+                L.append((map_func(trace), trace.log_prob))
+            conn.send(L)
+            conn.close()
 
-        processes = [mp.Process(target=make_trace, args=(chunk, trace_list)) for chunk in chunks]
-
+        #processes = [mp.Process(target=make_trace, args=(chunks[i], trace_batches)) for i in range(4)]
+        processes = []
+        pipes = []
+        
         start = time.time()
+        for i in range(num_workers):
+            recv_end, send_end = mp.Pipe(False)
+            p = mp.Process(target=make_trace, args=(chunks[i], send_end))
+            processes.append(p)
+            pipes.append(recv_end)
+
         for p in processes:
             p.start()
 
+
         for p in processes:
             p.join()
+            p.close()
+
+        results = [x.recv() for x in pipes]
+
         
         print('trace_time=', time.time()-start)
 
@@ -193,11 +224,11 @@ class Model():
 
         if (util._verbosity > 1) and not silent:
             print()
-        for trace, log_prob in trace_list:
-            traces.add(trace, log_prob)
-        traces.finalize()
-        return trace_list
-
+        # for trace_list in trace_batches:
+        #     for trace, log_prob in trace_list:
+        #         traces.add(trace, log_prob)
+        # traces.finalize()
+        return results
 
 
     #Invokes the trace generator.
