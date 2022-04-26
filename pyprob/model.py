@@ -128,38 +128,43 @@ class Model():
         #         trace = state._end_trace(result)
         #         L.put((map_func(trace), trace.log_prob))
 
-        def make_trace(chunk, conn):
+        def make_trace(chunk, q):
             util.seed()
             L = []
-            for i in chunk:
+            for i in enumerate(chunk):
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
+                #conn.send(trace)
                 L.append((map_func(trace), trace.log_prob))
-            conn.send(L)
-            conn.close()
+            print('completed traces for process')
+            q.put(L)
+            #conn.send(L)
+            #conn.close()
 
         #processes = [mp.Process(target=make_trace, args=(chunks[i], trace_batches)) for i in range(4)]
         processes = []
         pipes = []
-        
+
+        queue = mp.Queue()
         start = time.time()
         for i in range(num_workers):
-            recv_end, send_end = mp.Pipe(False)
-            p = mp.Process(target=make_trace, args=(chunks[i], send_end))
+            #recv_end, send_end = mp.Pipe(False)
+            p = mp.Process(target=make_trace, args=(chunks[i], queue))
             processes.append(p)
-            pipes.append(recv_end)
+            #pipes.append(recv_end)
+        
 
         for p in processes:
             p.start()
-
 
         for p in processes:
             p.join()
             p.close()
 
-        results = [x.recv() for x in pipes]
-
+        #print(queue.get())
+        #results = [x.recv() for x in pipes]
+        results = [[0]]
         
         print('trace_time=', time.time()-start)
 
