@@ -8,6 +8,7 @@ import os
 import math
 import random
 import warnings
+from copy import deepcopy
 from termcolor import colored
 from torch.utils.data import Dataset, DataLoader
 import multiprocessing as mp
@@ -130,21 +131,25 @@ class Model():
 
         def make_trace(chunk, q):
             util.seed()
-            L = []
-            for i in enumerate(chunk):
+            #L = []
+            for i in chunk:
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
+                q.put(trace)
+                del trace
                 #conn.send(trace)
-                L.append((map_func(trace), trace.log_prob))
+                #L.append((map_func(trace), trace.log_prob))
             print('completed traces for process')
-            q.put(L)
+            #q.put(L)
             #conn.send(L)
             #conn.close()
 
         #processes = [mp.Process(target=make_trace, args=(chunks[i], trace_batches)) for i in range(4)]
         processes = []
         pipes = []
+
+        trace_list = []
 
         queue = mp.Queue()
         start = time.time()
@@ -157,6 +162,10 @@ class Model():
 
         for p in processes:
             p.start()
+
+        for i in range(num_traces):
+            print(i)
+            trace_list.append(deepcopy(queue.get()))
 
         for p in processes:
             p.join()
@@ -233,7 +242,7 @@ class Model():
         #     for trace, log_prob in trace_list:
         #         traces.add(trace, log_prob)
         # traces.finalize()
-        return results
+        return trace_list
 
 
     #Invokes the trace generator.

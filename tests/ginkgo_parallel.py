@@ -158,8 +158,14 @@ traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.PRI
 #traces = simulatorginkgo._dis_traces(num_traces = 200, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 8)
 #traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
 total = time.time() - start
-print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0][0])
+print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0])
 
+start = time.time()
+traces = simulatorginkgo._traces(num_traces = 1000, trace_mode=TraceMode.PRIOR,observe = {'dummy':1})
+#traces = simulatorginkgo._dis_traces(num_traces = 200, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 8)
+#traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
+total = time.time() - start
+print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0])
 
 # if __name__ == '__main__':
 #     simulatorginkgo.train(iterations=2, importance_sample_size=5000)
