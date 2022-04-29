@@ -11,7 +11,7 @@ import warnings
 from copy import deepcopy
 from termcolor import colored
 from torch.utils.data import Dataset, DataLoader
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 from .distributions import Empirical
 from . import util, state, TraceMode, PriorInflation, InferenceEngine, InferenceNetwork, Optimizer, LearningRateScheduler, AddressDictionary
@@ -117,9 +117,9 @@ class Model():
         if not remainder:
             chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
         else:
-            chunk_size = num_traces // (num_workers -1)
-            chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers)]
-            chunks.append(range(num_traces - remainder, num_traces))
+            chunk_size = num_traces // (num_workers)
+            chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers-1)]
+            chunks.append(range(chunk_size*(num_workers-1), num_traces))
 
         # def make_trace(chunk, L):
         #     util.seed()
@@ -136,8 +136,8 @@ class Model():
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
-                q.put(trace)
-                del trace
+                q.put((map_func(trace), trace.log_prob))
+                #del trace
                 #conn.send(trace)
                 #L.append((map_func(trace), trace.log_prob))
             print('completed traces for process')
@@ -165,7 +165,7 @@ class Model():
 
         for i in range(num_traces):
             print(i)
-            trace_list.append(deepcopy(queue.get()))
+            traces.add(deepcopy(queue.get()))
 
         for p in processes:
             p.join()
@@ -241,8 +241,8 @@ class Model():
         # for trace_list in trace_batches:
         #     for trace, log_prob in trace_list:
         #         traces.add(trace, log_prob)
-        # traces.finalize()
-        return trace_list
+        traces.finalize()
+        return traces
 
 
     #Invokes the trace generator.
