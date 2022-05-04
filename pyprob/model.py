@@ -100,7 +100,7 @@ class Model():
             warnings.warn('No inference network found. Sampling from prior')
             if num_workers > 1:
                 warnings.warn('Not parallelising, since it normally does not improve speed of sampling from prior')
-            traces = self._traces(num_traces=num_traces, trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=map_func, silent=silent, observe=observe, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
+            traces = self._traces(num_traces=num_traces, trace_mode=TraceMode.PRIOR_FOR_INFERENCE_NETWORK, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, inference_network=None, map_func=map_func, silent=silent, observe=None, file_name=file_name, likelihood_importance=likelihood_importance, *args, **kwargs)
             return traces
 
         if num_workers <=1:
@@ -332,9 +332,9 @@ class Model():
     def reset_inference_network(self):
         self._inference_network = None
 
-    def learn_inference_network(self, num_traces, num_traces_end=1e9, inference_engine = None, importance_sample_size = None, ess_target=500,inference_network=InferenceNetwork.FEEDFORWARD, prior_inflation=PriorInflation.DISABLED, dataset_dir=None, dataset_valid_dir=None, observe_embeddings={}, batch_size=64, valid_size=None, valid_every=None, optimizer_type=Optimizer.ADAM, learning_rate_init=0.001, learning_rate_end=1e-6, learning_rate_scheduler_type=LearningRateScheduler.NONE, momentum=0.9, weight_decay=0., save_file_name_prefix=None, save_every_sec=600, pre_generate_layers=False, distributed_backend=None, distributed_params_sync_every_iter=10000, distributed_num_buckets=None, dataloader_offline_num_workers=0, stop_with_bad_loss=True, log_file_name=None, lstm_dim=512, lstm_depth=1, proposal_mixture_components=10):
+    def learn_inference_network(self, num_traces, num_traces_end=1e9, inference_engine = None, importance_sample_size = None, ess_target=500,inference_network=InferenceNetwork.FEEDFORWARD, prior_inflation=PriorInflation.DISABLED, dataset_dir=None, dataset_valid_dir=None, observe_embeddings={}, batch_size=64, valid_size=None, valid_every=None, optimizer_type=Optimizer.ADAM, learning_rate_init=0.001, learning_rate_end=1e-6, learning_rate_scheduler_type=LearningRateScheduler.NONE, momentum=0.9, weight_decay=0., save_file_name_prefix=None, save_every_sec=600, pre_generate_layers=False, distributed_backend=None, distributed_params_sync_every_iter=10000, distributed_num_buckets=None, dataloader_offline_num_workers=0, stop_with_bad_loss=True, log_file_name=None, lstm_dim=512, lstm_depth=1, proposal_mixture_components=10, num_workers = 1):
         if dataset_dir is None:
-            dataset = OnlineDataset(model=self, inference_engine = inference_engine, inference_network=self._inference_network, importance_sample_size = importance_sample_size, ess_target = ess_target, prior_inflation=prior_inflation)
+            dataset = OnlineDataset(model=self, inference_engine = inference_engine, inference_network=self._inference_network, importance_sample_size = importance_sample_size, ess_target = ess_target, prior_inflation=prior_inflation, num_workers=num_workers)
         else:
             dataset = OfflineDataset(dataset_dir=dataset_dir)
 

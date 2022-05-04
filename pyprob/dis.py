@@ -131,7 +131,7 @@ class ModelDIS(Model):
     # def learn_inference_network(self, num_traces, num_traces_end=1000000000, inference_engine=None, importance_sample_size=None, inference_network=..., prior_inflation=..., dataset_dir=None, dataset_valid_dir=None, observe_embeddings=..., batch_size=64, valid_size=None, valid_every=None, optimizer_type=..., learning_rate_init=0.001, learning_rate_end=0.000001, learning_rate_scheduler_type=..., momentum=0.9, weight_decay=0, save_file_name_prefix=None, save_every_sec=600, pre_generate_layers=False, distributed_backend=None, distributed_params_sync_every_iter=10000, distributed_num_buckets=None, dataloader_offline_num_workers=0, stop_with_bad_loss=True, log_file_name=None, lstm_dim=512, lstm_depth=1, proposal_mixture_components=10):
     #     return super().learn_inference_network(num_traces, num_traces_end, inference_engine, importance_sample_size, inference_network, prior_inflation, dataset_dir, dataset_valid_dir, observe_embeddings, batch_size, valid_size, valid_every, optimizer_type, learning_rate_init, learning_rate_end, learning_rate_scheduler_type, momentum, weight_decay, save_file_name_prefix, save_every_sec, pre_generate_layers, distributed_backend, distributed_params_sync_every_iter, distributed_num_buckets, dataloader_offline_num_workers, stop_with_bad_loss, log_file_name, lstm_dim, lstm_depth, proposal_mixture_components)
 
-    def train(self, iterations=10, num_traces = 500, importance_sample_size=5000, ess_target=500, batch_size=100, **kwargs):
+    def train(self, iterations=10, num_traces = 500, importance_sample_size=5000, ess_target=500, batch_size=100, num_workers = 1, **kwargs):
         for i in range(iterations):
             # TO DO: suppress messages about OfflineDataset creation
             self.learn_inference_network(
@@ -141,6 +141,7 @@ class ModelDIS(Model):
                 inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
                 batch_size=batch_size,
                 observe_embeddings={"dummy":{'dim':1, 'depth':1}},
+                num_workers = num_workers,
                 **kwargs
                 )
 
@@ -151,4 +152,3 @@ class ModelDIS(Model):
 
     def save(self, file_name):
         self.save_inference_network(file_name)
-

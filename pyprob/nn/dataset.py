@@ -85,7 +85,7 @@ class PosteriorGetter(Dataset):
         
 
 class OnlineDataset(Dataset):
-    def __init__(self, model, length=None, inference_engine = None, inference_network = None, importance_sample_size = None, num_workers=4,ess_target = 500, prior_inflation=PriorInflation.DISABLED):
+    def __init__(self, model, length=None, inference_engine = None, inference_network = None, importance_sample_size = None, num_workers=1 ,ess_target = 500, prior_inflation=PriorInflation.DISABLED):
         self._model = model
         if length is None:
             length = int(1e6)
@@ -101,7 +101,8 @@ class OnlineDataset(Dataset):
             self._semi_online_dataset = self._model._dis_traces(
                 num_traces=self._importance_sample_size,
                 inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
-                observe={"dummy": 1})
+                observe={"dummy": 1},
+                num_workers = num_workers)
             self._model.update_DIS_weights(self._semi_online_dataset, self._ess_target)
             self._length=self._importance_sample_size
 
