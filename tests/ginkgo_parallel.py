@@ -153,13 +153,14 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
 
 #torch.multiprocessing.set_sharing_strategy("file_system")
 #simulatorginkgo.train(iterations=1, importance_sample_size=5000)
-simulatorginkgo.load_inference_network('test_network_full')
+#simulatorginkgo.load_inference_network('test_network_full')
 start = time.time()
-#races = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.PRIOR,observe = {'dummy':1}, num_workers = 4)
-traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.IMPORTANCE_SAMPLING_WITH_INFERENCE_NETWORK,inference_network=simulatorginkgo._inference_network,observe = {'dummy':1}, num_workers = 7)
+simulatorginkgo.train(num_traces=500, importance_sample_size=500)
+#traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.PRIOR, observe = {'dummy':1}, num_workers = 4)
+#traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,observe = {'dummy':1}, num_workers = 1)
 #traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
 total = time.time() - start
-print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0])
+#print('time taken = ', total, ' num_traces =', len(traces),' first trace=', traces[0])
 
 start = time.time()
 #traces = simulatorginkgo._traces(num_traces = 1000, trace_mode=TraceMode.PRIOR,observe = {'dummy':1})
