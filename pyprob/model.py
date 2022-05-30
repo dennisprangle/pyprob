@@ -95,7 +95,10 @@ class Model():
             yield trace
 
 
-    def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.POSTERIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, map_func=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=1, *args, **kwargs):
+    def _dis_traces(self, num_traces=5000, trace_mode=TraceMode.POSTERIOR, inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING, ess_target=500, map_func=None, silent=False, observe=None, file_name=None, likelihood_importance=1., num_workers=1, *args, **kwargs):
+        if not self.dist_fun:
+            raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
+
         if self._inference_network is None:
             warnings.warn('No inference network found. Sampling from prior')
             if num_workers > 1:
@@ -126,6 +129,10 @@ class Model():
             chunks = [range(i*chunk_size, (i+1)*chunk_size) for i in range(num_workers-1)]
             chunks.append(range(chunk_size*(num_workers-1), num_traces))
 
+        def distance(trace):
+            #trace_obs = [v for v in trace.variables_observed if v.name != 'dummy']
+            trace_obs = [v.value for v in trace.variables_observed if v.name != 'dummy']
+            return self.dist_fun(self.obs, trace_obs)
 
         def make_trace(chunk, q):
             util.seed()
@@ -134,6 +141,9 @@ class Model():
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
+                dist = distance(trace)
+                log_w_contrib = -0.5 * dist**2 / self.epsilon**2.
+                trace.log_importance_weight+=log_w_contrib
                 q.put((map_func(trace), trace.log_importance_weight))
 
         processes = []

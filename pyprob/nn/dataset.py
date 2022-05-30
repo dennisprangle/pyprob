@@ -100,10 +100,11 @@ class OnlineDataset(Dataset):
         if inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
             self._semi_online_dataset = self._model._dis_traces(
                 num_traces=self._importance_sample_size,
+                ess_target=ess_target,
                 inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
                 observe={"dummy": 1},
                 num_workers = num_workers)
-            self._model.update_DIS_weights(self._semi_online_dataset, self._ess_target)
+            #self._model.update_DIS_weights(self._semi_online_dataset, self._ess_target)
             self._length=self._importance_sample_size
 
 

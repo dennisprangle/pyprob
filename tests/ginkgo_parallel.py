@@ -155,7 +155,7 @@ simulatorginkgo = SimulatorModelDIS(jet_p=jet4vec,  # parent particle 4-vector
 #simulatorginkgo.train(iterations=1, importance_sample_size=5000)
 #simulatorginkgo.load_inference_network('test_network_full')
 start = time.time()
-simulatorginkgo.train(num_traces=1000, importance_sample_size=5000, num_workers = 7)
+simulatorginkgo.train(num_traces=1000, importance_sample_size=1000, num_workers = 7)
 #traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.PRIOR, observe = {'dummy':1}, num_workers = 4)
 #traces = simulatorginkgo._dis_traces(num_traces = 1000, trace_mode=TraceMode.POSTERIOR, inference_engine= InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,observe = {'dummy':1}, num_workers = 1)
 #traces = simulatorginkgo._traces(num_traces = 128, observe = {'dummy':1})
