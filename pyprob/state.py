@@ -142,17 +142,19 @@ def observe(distribution, value=None, name=None, address=None):
         value = distribution.sample()
     elif _inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
         variable = Variable(distribution=distribution, value=None, address_base=address_base, address=address, instance=instance, log_prob=0., control=True, name=name, observed=True, reused=False)
-        proposal_distribution = _current_trace_inference_network._infer_step(variable, prev_variable=_current_trace_previous_variable, proposal_min_train_iterations=_current_trace_inference_network_proposal_min_train_iterations)
-        value = proposal_distribution.sample()
+        #proposal_distribution = _current_trace_inference_network._infer_step(variable, prev_variable=_current_trace_previous_variable, proposal_min_train_iterations=_current_trace_inference_network_proposal_min_train_iterations)
+        #value = proposal_distribution.sample()
+        value = distribution.sample()
         if value.dim() > 0:
             value = value[0]
         log_prob = distribution.log_prob(value, sum=True)
-        proposal_log_prob = proposal_distribution.log_prob(value, sum=True)
-        if util.has_nan_or_inf(log_prob):
-            warnings.warn('Prior log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\n log_prob: {}'.format(distribution, value, log_prob))
-        if util.has_nan_or_inf(proposal_log_prob):
-            warnings.warn('Proposal log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\nlog_prob: {}'.format(proposal_distribution, value, proposal_log_prob))
-        log_importance_weight = float(log_prob) - float(proposal_log_prob)
+        # proposal_log_prob = proposal_distribution.log_prob(value, sum=True)
+        # if util.has_nan_or_inf(log_prob):
+        #     warnings.warn('Prior log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\n log_prob: {}'.format(distribution, value, log_prob))
+        # if util.has_nan_or_inf(proposal_log_prob):
+        #     warnings.warn('Proposal log_prob has NaN, inf, or -inf.\ndistribution: {}\n value: {}\nlog_prob: {}'.format(proposal_distribution, value, proposal_log_prob))
+        # log_importance_weight = float(log_prob) - float(proposal_log_prob)
+        log_importance_weight = None
         variable = Variable(distribution=distribution, value=value, address_base=address_base, address=address, instance=instance, log_prob=log_prob, log_importance_weight=log_importance_weight, control=True, name=name, observed=True, reused=False)
         _current_trace_previous_variable = variable
     else:

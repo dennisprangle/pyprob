@@ -134,7 +134,7 @@ class Model():
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
-                q.put((map_func(trace), trace.log_prob))
+                q.put((map_func(trace), trace.log_importance_weight))
 
         processes = []
         queue = mp.Queue()

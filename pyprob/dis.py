@@ -6,7 +6,7 @@ import os
 from torch.utils.data import Dataset
 from . import InferenceEngine, Model, TraceMode
 from .distributions import Empirical
-from pyprob.util import InferenceEngine
+from pyprob.util import InferenceEngine, InferenceNetwork
 
 def effective_sample_size(w):
     """Effective sample size of weights
@@ -142,6 +142,7 @@ class ModelDIS(Model):
                 batch_size=batch_size,
                 observe_embeddings={"dummy":{'dim':1, 'depth':1}},
                 num_workers = num_workers,
+                inference_network=InferenceNetwork.LSTM,
                 **kwargs
                 )
 
