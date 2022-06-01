@@ -97,9 +97,14 @@ class OnlineDataset(Dataset):
         self._importance_sample_size = importance_sample_size
         self._ess_target = ess_target
         self._semi_online_dataset = None
+        if not inference_network:
+            trace_mode = TraceMode.PRIOR_FOR_INFERENCE_NETWORK
+        else:
+            trace_mode = TraceMode.POSTERIOR
         if inference_engine == InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING:
             self._semi_online_dataset = self._model._dis_traces(
                 num_traces=self._importance_sample_size,
+                trace_mode = trace_mode,
                 ess_target=ess_target,
                 inference_engine=InferenceEngine.DISTILLING_IMPORTANCE_SAMPLING,
                 observe={"dummy": 1},

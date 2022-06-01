@@ -112,7 +112,7 @@ class SimulatorModelDIS(invMass_ginkgo.SimulatorModel, ModelDIS):
         super().__init__(**kwargs)
 
     def dummy_bernoulli(self, jet):
-        return True
+        return torch.tensor(1)
 
     def forward(self, inputs=None):
         assert inputs is None # Modify code if this ever not met?
