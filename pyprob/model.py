@@ -230,7 +230,7 @@ class Model():
                 q.put((map_func(trace), trace.log_importance_weight, sqd))
 
         if num_workers == 1 or trace_mode == TraceMode.PRIOR or trace_mode == trace_mode.PRIOR_FOR_INFERENCE_NETWORK:
-            generator = self._trace_generator(trace_mode=trace_mode, inference_engine=inference_engine, observe=observe, likelihood_importance=likelihood_importance, *args, **kwargs)
+            generator = self._trace_generator(trace_mode=trace_mode, inference_engine=inference_engine, inference_network=self._inference_network, observe=observe, likelihood_importance=likelihood_importance, *args, **kwargs)
             for i in range(num_traces):
 
                 trace = next(generator)
