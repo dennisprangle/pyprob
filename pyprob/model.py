@@ -35,8 +35,8 @@ def effective_sample_size(w):
     return (sumw ** 2.0) / torch.sum(w ** 2.0)
 
 
-def get_alternate_weights(sqd, old_weights, old_eps, new_eps):
-    """Return weights appropriate to another `epsilon` value"""
+def get_alternate_weights(sqd, old_weights, eps):
+    """Adjusts weights vector to consider distance"""
     # Interpretable version of the generic reweighting code:
     # w = old_weights
     # d = torch.sqrt(sqd)
@@ -45,9 +45,8 @@ def get_alternate_weights(sqd, old_weights, old_eps, new_eps):
     # w /= sum(w)
 
     w = old_weights.detach().clone()
-    if new_eps == 0:
+    if eps == 0:
         # Remove existing distance-based weight contribution
-        w /= torch.exp(-0.5 * sqd / old_eps**2.)
         # Replace with indicator function weight contribution
         w = torch.where(
             sqd==0.,
@@ -56,7 +55,7 @@ def get_alternate_weights(sqd, old_weights, old_eps, new_eps):
         )
     else:
         # An efficient way to do the generic case
-        a = 0.5 * (old_eps**-2. - new_eps**-2.)
+        a = - 0.5 * eps**-2.
         w *= torch.exp(sqd*a)
 
     sumw = torch.sum(w)
@@ -65,12 +64,12 @@ def get_alternate_weights(sqd, old_weights, old_eps, new_eps):
     return w
 
 
-def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
+def find_eps(sqd, old_weights, target_ess, upper, bisection_its=50):
         """Return epsilon value <= `upper` giving ess matching `target_ess` as closely as possible
 
         Bisection search is performed using `bisection_its` iterations
         """
-        w = get_alternate_weights(sqd, old_weights, old_eps, upper)
+        w = get_alternate_weights(sqd, old_weights, upper)
         ess = effective_sample_size(w)
         if ess < target_ess:
             return upper
@@ -78,7 +77,7 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
         lower = 0.
         for i in range(bisection_its):
             eps_guess = (lower + upper) / 2.
-            w = get_alternate_weights(sqd, old_weights, old_eps, eps_guess)
+            w = get_alternate_weights(sqd, old_weights, eps_guess)
             ess = effective_sample_size(w)
             if ess > target_ess:
                 upper = eps_guess
@@ -87,13 +86,51 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
 
         # Consider returning eps=0 if it's still an endpoint
         if lower == 0.:
-            w = get_alternate_weights(sqd, old_weights, old_eps, 0.)
+            w = get_alternate_weights(sqd, old_weights, 0.)
             ess = effective_sample_size(w)
             if ess > target_ess:
                 return 0.
 
         # Be conservative by returning upper end of remaining range
         return upper
+
+def truncate_weights(weights, max_weight):
+    """Truncate weights
+
+    All calling no weights are above `max_weight` times total of weights.
+
+    The function modifies and returns the weights"""
+    S = sum(weights)
+    to_trunc = (weights > S*max_weight)
+    n_to_trunc = sum(to_trunc)
+    if n_to_trunc == 0:
+        S = sum(weights)
+        weights /= S
+        return weights
+
+    print(f"Truncating {n_to_trunc:d} weights")
+    to_not_trunc = torch.logical_not(to_trunc)
+    sum_untrunc = sum(weights[to_not_trunc])
+    if sum_untrunc == 0:
+        # Impossible to truncate further!
+        S = sum(weights)
+        weights /= S
+        return weights
+
+    trunc_to = max_weight * sum_untrunc / (1. - max_weight * n_to_trunc)
+    max_untrunc = torch.max(weights[to_not_trunc])
+    ## trunc_to calculation is done so that
+    ## after w[to_trunc]=trunc_to
+    ## w[to_trunc] / sum(w) all equal max_weight
+    ## **But** we don't want to truncate below next smallest weight
+    if trunc_to >= max_untrunc:
+        weights[to_trunc] = trunc_to
+        S = sum(weights)
+        weights /= S
+        return weights
+    else:
+        weights[to_trunc] = max_untrunc
+        return truncate_weights(weights, max_weight)
 
 
 def unwrap_make_trace(self, index, *args, **kwargs):
@@ -140,10 +177,11 @@ class Parallel_Generator(Dataset):
 
 
 class Model():
-    def __init__(self, name='Unnamed PyProb model', address_dict_file_name=None, epsilon=np.inf, obs = None, dist_fun = None, **kwargs):
+    def __init__(self, name='Unnamed PyProb model', address_dict_file_name=None, epsilon=np.inf, obs = None, dist_fun = None, weight_truncation=False, **kwargs):
         super().__init__()
         self.name = name
         self.dis_model = False
+        self.weight_truncation = weight_truncation
         self.epsilon = epsilon
         self.distances = None
         self.dist_fun = dist_fun
@@ -246,7 +284,7 @@ class Model():
                     if i > 0:
                         log_weights[i] = log_weights[-1]
                 else:
-                    traces.add(trace, log_weight)
+                    traces.add(map_func(trace), log_weight)
                     sqd = distance(trace)**2
                     sqdists.append(sqd)
                     log_weights[i] = log_weight
@@ -318,15 +356,19 @@ class Model():
         if upper_eps == np.inf:
             # A finite value needed, so pick a sensible upper bound
             upper_eps = torch.max(sqdists).item()
-        new_epsilon = find_eps(sqdists, w, self.epsilon, ess_target, upper_eps)
-        w = get_alternate_weights(sqdists, w, self.epsilon, new_epsilon)
-        self.epsilon = new_epsilon
+
+        self.epsilon = find_eps(sqdists, w, ess_target, upper_eps)
         # self.ess = posterior._effective_sample_size # Should set this maybe...
         self.ess = effective_sample_size(w)
-        traces.dis_eps=new_epsilon
 
         log_w_contrib = -0.5 * sqdists / self.epsilon**2.
         traces.log_weights += log_w_contrib
+
+        if self.weight_truncation:
+            weights = torch.exp(traces.log_weights)
+            weights = truncate_weights(weights, 0.1)
+            traces.log_weights = torch.log(weights)
+        
 
         traces.finalize()
 

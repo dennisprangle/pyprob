@@ -81,7 +81,7 @@ def find_eps(sqd, old_weights, old_eps, target_ess, upper, bisection_its=50):
 
 
 class ModelDIS(Model):
-    def __init__(self, epsilon=np.inf, obs = None, dist_fun = None, **kwargs):
+    def __init__(self, epsilon=np.inf, obs = None, dist_fun = None, weight_truncation=False,**kwargs):
         super().__init__(kwargs)
         self.dis_model = True
         self.epsilon = epsilon
@@ -89,6 +89,7 @@ class ModelDIS(Model):
         self.dist_fun = dist_fun
         self.obs = obs
         self.ess = 0
+        self.weight_truncation = weight_truncation
 
     # def _traces(self, *args, **kwargs):
     #     # Set observable values whenever _traces is run, even from 'prior' or 'posterior'
@@ -101,12 +102,17 @@ class ModelDIS(Model):
         if not self.dist_fun:
             raise RuntimeError('Cannot extract distances. Ensure the model is initialised with a distance measure: dist_fun = ... ')
         # Consider future efficiency: broadcasting / working with posterior_results etc.
+
+
         def distance(trace):
             #trace_obs = [v for v in trace.variables_observed if v.name != 'dummy']
             trace_obs = [v.value for v in trace.variables_observed if v.name != 'dummy']
             return self.dist_fun(self.obs, trace_obs)
         self.distances = torch.tensor([distance(x) for x in posterior.values])
         posterior.sqd = self.distances**2
+
+
+
         log_w_contrib = -0.5 * posterior.sqd / self.epsilon**2.
         # Note - can't set posterior.weights directly (it's a property with no setter)
         # But can access the underlying variables in which weights is stored.
@@ -115,10 +121,13 @@ class ModelDIS(Model):
 
         # Update epsilon 
         w = posterior.weights
-        upper_eps = self.epsilon
-        if upper_eps == np.inf:
+        
+        if self.epsilon == np.inf:
             # A finite value needed, so pick a sensible upper bound
             upper_eps = torch.max(posterior.sqd).item()
+        else:
+            upper_eps = self.epsilon
+
         new_epsilon = find_eps(posterior.sqd, w, self.epsilon, ess_target, upper_eps)
         w = get_alternate_weights(posterior.sqd, w, self.epsilon, new_epsilon)
         self.epsilon = new_epsilon
