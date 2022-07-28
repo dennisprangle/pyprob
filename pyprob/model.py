@@ -1,6 +1,6 @@
 # Some annotations by Sammy (occasional speculation)
 
-from py import process
+#from py import process
 import torch
 import time
 import sys
@@ -186,7 +186,8 @@ class Model():
         self.distances = None
         self.dist_fun = dist_fun
         self.obs = obs
-        self.ess = 0
+        self.ess_pre = 0
+        self.ess_post = 0
         self._inference_network = None
         if address_dict_file_name is None:
             self._address_dictionary = None
@@ -264,7 +265,10 @@ class Model():
                 state._begin_trace()
                 result = self.forward(*args, **kwargs)
                 trace = state._end_trace(result)
-                sqd = distance(trace)**2
+                if util.has_nan_or_inf(trace.log_importance_weight):
+                    sqd = torch.tensor(np.inf)
+                else:
+                    sqd = distance(trace)**2
                 q.put((map_func(trace), trace.log_importance_weight, sqd))
 
         if num_workers == 1 or trace_mode == TraceMode.PRIOR or trace_mode == trace_mode.PRIOR_FOR_INFERENCE_NETWORK:
@@ -285,7 +289,10 @@ class Model():
                         log_weights[i] = log_weights[-1]
                 else:
                     traces.add(map_func(trace), log_weight)
-                    sqd = distance(trace)**2
+                    try:
+                        sqd = distance(trace)**2
+                    except:
+                        print(trace.result['leaves'])
                     sqdists.append(sqd)
                     log_weights[i] = log_weight
 
@@ -359,7 +366,7 @@ class Model():
 
         self.epsilon = find_eps(sqdists, w, ess_target, upper_eps)
         # self.ess = posterior._effective_sample_size # Should set this maybe...
-        self.ess = effective_sample_size(w)
+        self.ess_pre = effective_sample_size(w)
 
         log_w_contrib = -0.5 * sqdists / self.epsilon**2.
         traces.log_weights += log_w_contrib
@@ -368,7 +375,8 @@ class Model():
             weights = torch.exp(traces.log_weights)
             weights = truncate_weights(weights, 0.1)
             traces.log_weights = torch.log(weights)
-        
+
+        self.ess_post = effective_sample_size(torch.exp(traces.log_weights))
 
         traces.finalize()
 
