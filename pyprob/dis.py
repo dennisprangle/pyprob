@@ -158,7 +158,7 @@ class ModelDIS(Model):
             # TO DO: Improve reporting results?
             print(f"Training iterations {i+1} "
                   f" epsilon {self.epsilon:.2f} "
-                  f" ESS {self.ess:.1f}")
+                  f" ESS {self.ess_post:.1f}")
 
     def save(self, file_name):
         self.save_inference_network(file_name)
